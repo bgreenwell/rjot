@@ -1,11 +1,11 @@
-use std::env;
-use std::fs;
-use std::io::{self, Read};
-use std::path::PathBuf;
-use std::process::Command;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::{Parser, Subcommand};
+use std::env;
+use std::fs;
+use std::io::Read;
+use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Parser, Debug)]
 #[command(version, about = "A minimalist, command-line journal.")]
@@ -33,8 +33,8 @@ fn get_jot_dir() -> Result<PathBuf> {
         Ok(val) => PathBuf::from(val),
         Err(_) => {
             // Use the standard user config directory.
-            let mut config_dir = dirs::config_dir()
-                .with_context(|| "Could not find a valid config directory.")?;
+            let mut config_dir =
+                dirs::config_dir().with_context(|| "Could not find a valid config directory.")?;
             config_dir.push("jot");
             config_dir
         }
@@ -47,7 +47,6 @@ fn get_jot_dir() -> Result<PathBuf> {
     }
     Ok(entries_dir)
 }
-
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -62,8 +61,10 @@ fn main() -> Result<()> {
     } else {
         // No subcommand was provided, so treat it as a direct jot.
         if cli.message.is_empty() {
-             // If no subcommand AND no message, show help.
-            println!("No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'.");
+            // If no subcommand AND no message, show help.
+            println!(
+                "No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'."
+            );
             println!("\nFor more information, try '--help'");
         } else {
             let message = cli.message.join(" ");
@@ -90,9 +91,9 @@ fn command_now(jot_dir: &PathBuf, message: &str) -> Result<()> {
 
 /// Handles the `jot new` subcommand.
 fn command_new(jot_dir: &PathBuf) -> Result<()> {
-    let editor = env::var("EDITOR")
-        .with_context(|| "The '$EDITOR' environment variable is not set.")?;
-    
+    let editor =
+        env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
+
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = jot_dir.join(filename);
@@ -105,7 +106,7 @@ fn command_new(jot_dir: &PathBuf) -> Result<()> {
     if !status.success() {
         bail!("Editor exited with a non-zero status. Aborting.");
     }
-    
+
     // Check if the file is empty after editing. If so, delete it.
     let mut file = fs::File::open(&file_path)?;
     let mut contents = String::new();
@@ -120,7 +121,6 @@ fn command_new(jot_dir: &PathBuf) -> Result<()> {
 
     Ok(())
 }
-
 
 /// Handles the `jot list` subcommand.
 fn command_list(jot_dir: &PathBuf) -> Result<()> {
@@ -142,7 +142,7 @@ fn command_list(jot_dir: &PathBuf) -> Result<()> {
         println!("\nNo jots found. Get jotting!");
         return Ok(());
     }
-    
+
     println!("\n{:<22} {}", "ID", "FIRST LINE");
     println!("{:-<22} {:-<50}", "", "");
 
@@ -151,9 +151,10 @@ fn command_list(jot_dir: &PathBuf) -> Result<()> {
         let filename = entry.file_name().to_string_lossy().to_string();
         let id = filename.replace(".md", "");
 
-        let contents = fs::read_to_string(&path).unwrap_or_else(|_| "Could not read file.".to_string());
+        let contents =
+            fs::read_to_string(&path).unwrap_or_else(|_| "Could not read file.".to_string());
         let first_line = contents.lines().next().unwrap_or("").trim();
-        
+
         println!("{:<22} {}", id, first_line);
     }
 
