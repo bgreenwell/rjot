@@ -143,7 +143,7 @@ fn command_list(jot_dir: &PathBuf) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{:<22} {}", "ID", "FIRST LINE");
+    println!("\n{:<22} FIRST LINE", "ID");
     println!("{:-<22} {:-<50}", "", "");
 
     for entry in sorted_entries.iter().take(10) {
