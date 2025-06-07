@@ -1,0 +1,73 @@
+# =============================================================================
+# Rust / Cargo
+# =============================================================================
+
+# Ignore the build directory, where all compiled artifacts are stored.
+# This is the most important rule in any Rust project.
+target/
+
+# Cargo.lock is intentionally NOT ignored. For a binary application like lstr,
+# committing Cargo.lock is crucial because it ensures that every developer
+# (and your CI server) uses the exact same versions of all dependencies,
+# guaranteeing reproducible builds.
+
+# Ignore build logs
+*.log
+# Ignore rust-analyzer specific files
+/.rust-analyzer
+
+
+# =============================================================================
+# IDE and Editor-Specific Files
+# =============================================================================
+
+# VS Code
+.vscode/
+
+# JetBrains (IntelliJ, RustRover, CLion)
+.idea/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*~
+*.swp
+*.swo
+
+
+# =============================================================================
+# OS-Specific Files
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+
+
+# =============================================================================
+# Local Environment Files
+# =============================================================================
+
+# Ignore local environment variables, which may contain sensitive data.
+.env
+.env.local
+
+
+# =============================================================================
+# Miscellaneous Files
+# =============================================================================
+
+# Ignore HTML files
+*.html
+
+# Ignore all directories with _files suffix
+*_files/
