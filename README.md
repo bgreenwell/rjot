@@ -1,6 +1,6 @@
 # rjot <img src="assets/logo.png" align="right" height="120" alt="rjot logo" />
 
-A minimalist, command-line journal that's fast, private, and git-friendly.
+A minimalist, command-line jotting utility that's fast, private, and git-friendly.
 
 [![Crates.io](https://img.shields.io/crates/v/rjot.svg?label=crates.io)](https://crates.io/crates/rjot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
