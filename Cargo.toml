@@ -1,7 +1,10 @@
 [package]
-name = "jot"
+name = "jot-rs"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "A minimalist, command-line journal that's fast, private, and git-friendly."
+license = "MIT"
+repository = "https://github.com/bgreenwell/jot"
 
 [dependencies]
 anyhow = "1.0"  # For cleaner error handling
@@ -10,3 +13,7 @@ clap = { version = "4.5", features = ["derive"] }
 dirs = "5.0.1" # Add this line
 serde = { version = "1.0.203", features = ["derive"] }
 serde_yaml = "0.9.34"
+
+[[bin]]
+name = "jot"
+path = "src/main.rs"
