@@ -120,29 +120,27 @@ fn main() -> Result<()> {
             Commands::Find { query } => command_find(&jot_dir, &query)?,
             Commands::Tags { tags } => command_tags(&jot_dir, &tags)?,
         }
-    } else {
-        if cli.message.is_empty() {
-            // If tags are provided without a message, show an error.
-            if cli.tags.is_some() {
-                bail!(
-                    "The --tags argument can only be used when creating a new jot with a message."
-                );
-            }
-            println!(
-                "No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'."
+    } else if cli.message.is_empty() {
+        // If tags are provided without a message, show an error.
+        if cli.tags.is_some() {
+            bail!(
+                "The --tags argument can only be used when creating a new jot with a message."
             );
-            println!("\nFor more information, try '--help'");
-        } else {
-            let message = cli.message.join(" ");
-            command_now(&jot_dir, &message, cli.tags)?;
         }
+        println!(
+            "No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'."
+        );
+        println!("\nFor more information, try '--help'");
+    } else {
+        let message = cli.message.join(" ");
+        command_now(&jot_dir, &message, cli.tags)?;
     }
 
     Ok(())
 }
 
 /// Handles the default action of creating a jot directly from arguments.
-fn command_now(jot_dir: &PathBuf, message: &str, tags: Option<Vec<String>>) -> Result<()> {
+fn command_now(jot_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
     let mut content = String::new();
 
     // If tags are provided, construct a frontmatter string
@@ -172,7 +170,7 @@ fn command_now(jot_dir: &PathBuf, message: &str, tags: Option<Vec<String>>) -> R
 }
 
 /// Handles the `jot new` subcommand.
-fn command_new(jot_dir: &PathBuf) -> Result<()> {
+fn command_new(jot_dir: &Path) -> Result<()> {
     let editor =
         env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
 
@@ -215,7 +213,7 @@ fn command_list(jot_dir: &PathBuf) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{:<22} {}", "ID", "FIRST LINE OF CONTENT");
+    println!("\n{:<22} FIRST LINE OF CONTENT", "ID");
     println!("{:-<22} {:-<50}", "", "");
 
     for entry in sorted_entries.iter().take(10) {
@@ -244,7 +242,7 @@ fn command_find(jot_dir: &PathBuf, query: &str) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{:<22} {}", "MATCHING NOTE ID", "FIRST LINE OF CONTENT");
+    println!("\n{:<22} FIRST LINE OF CONTENT", "MATCHING NOTE ID");
     println!("{:-<22} {:-<50}", "", "");
     for note in matches {
         let first_line = note.content.lines().next().unwrap_or("").trim();
@@ -273,7 +271,7 @@ fn command_tags(jot_dir: &PathBuf, tags: &[String]) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{:<22} {}", "MATCHING NOTE ID", "FIRST LINE OF CONTENT");
+    println!("\n{:<22} FIRST LINE OF CONTENT", "MATCHING NOTE ID");
     println!("{:-<22} {:-<50}", "", "");
     for note in matches {
         let first_line = note.content.lines().next().unwrap_or("").trim();
