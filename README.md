@@ -2,7 +2,7 @@
 
 A minimalist, command-line journal that's fast, private, and git-friendly.
 
-[![Crates.io](https://img.shields.io/crates/v/jot-rs.svg?label=crates.io)](https://crates.io/crates/jot-rs)
+[![Crates.io](https://img.shields.io/crates/v/jot-cli.svg?label=crates.io)](https://crates.io/crates/jot-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## The vision
@@ -47,8 +47,7 @@ First, if you don't already have it, install the Rust toolchain from the officia
 Once `cargo` is installed, you can install `jot` with the following command:
 
 ```sh
-# Note: Replace 'jot-rs' with your final chosen package name on crates.io
-cargo install jot-rs
+cargo install jot-cli
 ```
 
 This will place the `jot` executable in your cargo binary path (usually `~/.cargo/bin/`), making it available from anywhere in your terminal.
