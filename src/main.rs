@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
@@ -57,13 +57,13 @@ enum Commands {
 }
 
 /// Gets the root directory for all jot data, ensuring it exists.
-fn get_jot_dir() -> Result<PathBuf> {
-    let path = match env::var("JOT_DIR") {
+fn get_rjot_dir() -> Result<PathBuf> {
+    let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
         Err(_) => {
             let mut config_dir =
                 dirs::config_dir().with_context(|| "Could not find a valid config directory.")?;
-            config_dir.push("jot");
+            config_dir.push("rjot");
             config_dir
         }
     };
@@ -71,7 +71,7 @@ fn get_jot_dir() -> Result<PathBuf> {
     let entries_dir = path.join("entries");
     if !entries_dir.exists() {
         fs::create_dir_all(&entries_dir)
-            .with_context(|| format!("Failed to create jot directory at {:?}", &entries_dir))?;
+            .with_context(|| format!("Failed to create rjot directory at {:?}", &entries_dir))?;
     }
     Ok(entries_dir)
 }
@@ -110,37 +110,35 @@ fn parse_note_from_file(path: &Path) -> Result<Note> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let jot_dir = get_jot_dir()?;
+    let rjot_dir = get_rjot_dir()?;
 
     // Decide which command to run
     if let Some(command) = cli.command {
         match command {
-            Commands::New => command_new(&jot_dir)?,
-            Commands::List => command_list(&jot_dir)?,
-            Commands::Find { query } => command_find(&jot_dir, &query)?,
-            Commands::Tags { tags } => command_tags(&jot_dir, &tags)?,
+            Commands::New => command_new(&rjot_dir)?,
+            Commands::List => command_list(&rjot_dir)?,
+            Commands::Find { query } => command_find(&rjot_dir, &query)?,
+            Commands::Tags { tags } => command_tags(&rjot_dir, &tags)?,
         }
     } else if cli.message.is_empty() {
         // If tags are provided without a message, show an error.
         if cli.tags.is_some() {
-            bail!(
-                "The --tags argument can only be used when creating a new jot with a message."
-            );
+            bail!("The --tags argument can only be used when creating a new jot with a message.");
         }
         println!(
-            "No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'."
+            "No message provided. Use 'rjot \"your message\"' or a subcommand like 'rjot new'."
         );
         println!("\nFor more information, try '--help'");
     } else {
         let message = cli.message.join(" ");
-        command_now(&jot_dir, &message, cli.tags)?;
+        command_now(&rjot_dir, &message, cli.tags)?;
     }
 
     Ok(())
 }
 
 /// Handles the default action of creating a jot directly from arguments.
-fn command_now(jot_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
+fn command_now(rjot_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
     let mut content = String::new();
 
     // If tags are provided, construct a frontmatter string
@@ -160,7 +158,7 @@ fn command_now(jot_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Resu
     println!("Jotting down: \"{}\"", message);
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
-    let file_path = jot_dir.join(filename);
+    let file_path = rjot_dir.join(filename);
 
     fs::write(&file_path, content)
         .with_context(|| format!("Failed to write to file {:?}", file_path))?;
@@ -169,14 +167,14 @@ fn command_now(jot_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Resu
     Ok(())
 }
 
-/// Handles the `jot new` subcommand.
-fn command_new(jot_dir: &Path) -> Result<()> {
+/// Handles the `rjot new` subcommand.
+fn command_new(rjot_dir: &Path) -> Result<()> {
     let editor =
         env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
 
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
-    let file_path = jot_dir.join(filename);
+    let file_path = rjot_dir.join(filename);
 
     let status = Command::new(&editor)
         .arg(&file_path)
@@ -201,9 +199,9 @@ fn command_new(jot_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Handles the `jot list` subcommand.
-fn command_list(jot_dir: &PathBuf) -> Result<()> {
-    let entries = fs::read_dir(jot_dir)?;
+/// Handles the `rjot list` subcommand.
+fn command_list(rjot_dir: &PathBuf) -> Result<()> {
+    let entries = fs::read_dir(rjot_dir)?;
     let mut sorted_entries: Vec<_> = entries.filter_map(Result::ok).collect();
     sorted_entries.sort_by_key(|e| e.file_name());
     sorted_entries.reverse();
@@ -224,10 +222,10 @@ fn command_list(jot_dir: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// Handles the `jot find` subcommand.
-fn command_find(jot_dir: &PathBuf, query: &str) -> Result<()> {
+/// Handles the `rjot find` subcommand.
+fn command_find(rjot_dir: &PathBuf, query: &str) -> Result<()> {
     println!("Searching for \"{}\" in your jots...", query);
-    let entries = fs::read_dir(jot_dir)?;
+    let entries = fs::read_dir(rjot_dir)?;
     let mut matches = Vec::new();
 
     for entry in entries.filter_map(Result::ok) {
@@ -251,10 +249,10 @@ fn command_find(jot_dir: &PathBuf, query: &str) -> Result<()> {
     Ok(())
 }
 
-/// Handles the `jot tags` subcommand.
-fn command_tags(jot_dir: &PathBuf, tags: &[String]) -> Result<()> {
+/// Handles the `rjot tags` subcommand.
+fn command_tags(rjot_dir: &PathBuf, tags: &[String]) -> Result<()> {
     println!("Filtering by tags: {:?}", tags);
-    let entries = fs::read_dir(jot_dir)?;
+    let entries = fs::read_dir(rjot_dir)?;
     let mut matches = Vec::new();
 
     for entry in entries.filter_map(Result::ok) {
