@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use std::env;
 use std::fs;
 use std::io::Read;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -76,7 +77,7 @@ fn main() -> Result<()> {
 }
 
 /// Handles the default action of creating a jot directly from arguments.
-fn command_now(jot_dir: &PathBuf, message: &str) -> Result<()> {
+fn command_now(jot_dir: &Path, message: &str) -> Result<()> {
     println!("Jotting down: \"{}\"", message);
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
@@ -90,7 +91,7 @@ fn command_now(jot_dir: &PathBuf, message: &str) -> Result<()> {
 }
 
 /// Handles the `jot new` subcommand.
-fn command_new(jot_dir: &PathBuf) -> Result<()> {
+fn command_new(jot_dir: &Path) -> Result<()> {
     let editor =
         env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
 
