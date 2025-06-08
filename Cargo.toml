@@ -8,3 +8,5 @@ anyhow = "1.0"  # For cleaner error handling
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 dirs = "5.0.1" # Add this line
+serde = { version = "1.0.203", features = ["derive"] }
+serde_yaml = "0.9.34"
