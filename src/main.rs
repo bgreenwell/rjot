@@ -33,8 +33,8 @@ struct Cli {
     /// The message to jot down. The default action if no subcommand is given.
     message: Vec<String>,
 
-    /// Add tags to a new jot.
-    #[arg(long, short, value_delimiter = ',')]
+    /// Add tags to a new jot. Accepts multiple values, space or comma separated.
+    #[arg(long, short, value_delimiter = ',', num_args(1..))]
     tags: Option<Vec<String>>,
 }
 
@@ -84,28 +84,31 @@ enum Commands {
     },
     /// Open an existing jot in the default editor
     Edit {
-        /// The prefix of the jot ID to edit. Use --last to edit the most recent jot.
+        /// The prefix of the jot ID to edit.
+        #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Edit the last created jot
-        #[arg(long, short)]
-        last: bool,
+        /// Edit the Nth most recent jot (e.g., --last=1 or just --last).
+        #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
+        last: Option<usize>,
     },
     /// Display the full content of a jot in the terminal
     Show {
-        /// The prefix of the jot ID to show. Use --last to show the most recent jot.
+        /// The prefix of the jot ID to show.
+        #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Show the last created jot
-        #[arg(long, short)]
-        last: bool,
+        /// Show the Nth most recent jot.
+        #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
+        last: Option<usize>,
     },
     /// Delete a jot with confirmation
     #[command(alias = "rm")]
     Delete {
-        /// The prefix of the jot ID to delete. Use --last to delete the most recent jot.
+        /// The prefix of the jot ID to delete.
+        #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Delete the last created jot
-        #[arg(long, short)]
-        last: bool,
+        /// Delete the Nth most recent jot.
+        #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
+        last: Option<usize>,
         /// Force deletion without confirmation
         #[arg(long, short)]
         force: bool,
@@ -225,15 +228,48 @@ fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<PathBu
     }
 }
 
-fn find_last_note(entries_dir: &Path) -> Result<PathBuf> {
+fn get_ordinal_suffix(n: usize) -> &'static str {
+    if (11..=13).contains(&(n % 100)) {
+        "th"
+    } else {
+        match n % 10 {
+            // What about 11, 12, and 13?
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        }
+    }
+}
+
+fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathBuf> {
+    if index == 0 {
+        bail!("--last index must be 1 or greater.");
+    }
     let mut entries: Vec<_> = fs::read_dir(entries_dir)?.filter_map(Result::ok).collect();
-    if entries.is_empty() {
+    let total_jots = entries.len();
+
+    if total_jots == 0 {
         bail!("No jots exist to act upon.");
     }
+
+    if index > total_jots {
+        bail!(
+            "Index out of bounds. You asked for the {}{} last jot, but only {} exist.",
+            index,
+            get_ordinal_suffix(index),
+            total_jots
+        );
+    }
+
     // Sort by filename, which is chronological
     entries.sort_by_key(|e| e.file_name());
-    // The last one is the most recent
-    Ok(entries.last().unwrap().path())
+
+    let target_index = total_jots - index;
+    entries
+        .get(target_index)
+        .map(|e| e.path())
+        .with_context(|| "Failed to get entry at calculated index. This is an unexpected error.")
 }
 
 // --- Main Entrypoint ---
@@ -290,17 +326,15 @@ fn main() -> Result<()> {
 fn get_note_path_for_action(
     entries_dir: &Path,
     id_prefix: Option<String>,
-    last: bool,
+    last: Option<usize>,
 ) -> Result<PathBuf> {
-    if last {
-        if id_prefix.is_some() {
-            bail!("Cannot use an ID prefix and the --last flag at the same time.");
-        }
-        find_last_note(entries_dir)
+    if let Some(index) = last {
+        find_note_by_index_from_end(entries_dir, index)
     } else if let Some(prefix) = id_prefix {
         find_unique_note_by_prefix(entries_dir, &prefix)
     } else {
-        bail!("You must provide a jot ID prefix or use the --last flag.");
+        // This case should be prevented by clap's `required = true` on the group
+        unreachable!();
     }
 }
 
