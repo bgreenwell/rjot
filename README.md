@@ -100,7 +100,7 @@ List your recent notes:
 Find notes by content or tags:
 ```sh
 ❯ rjot find "secret project"
-❯ rjot tags idea cli
+❯ rjot tags idea,cli
 ```
 
 ### A Note on shells and quotes
@@ -131,10 +131,10 @@ If you must use double quotes (e.g., to expand a variable), you can escape the s
 
 `rjot` is under active development. Here is the plan for upcoming features:
 
--   [ ] **Templates and time-based views**
+-   [x] **Templates and time-based views**
     -   [ ] Custom templates for `rjot new` (e.g., `rjot new --template meeting`).
-    -   [ ] `rjot today`: View all notes from the current day.
-    -   [ ] `rjot this-week`: View all notes from the current week.
+    -   [x] `rjot today`: View all notes from the current day.
+    -   [x] `rjot this-week`: View all notes from the current week.
     -   [ ] `rjot <date> --compile`: Compile notes from a time range into a single summary file.
 -   [ ] **Power features**
     -   [ ] `rjot init --git`: Native `git` integration for versioning and sync.
