@@ -2,10 +2,10 @@
 
 A minimalist, command-line journal that's fast, private, and git-friendly.
 
-[![Crates.io](https://img.shields.io/crates/v/jot-cli.svg?label=crates.io)](https://crates.io/crates/jot-cli)
+[![Crates.io](https://img.shields.io/crates/v/jot-rs.svg?label=crates.io)](https://crates.io/crates/jot-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## The Vision
+## The vision
 
 `jot` is a tool for capturing thoughts at the speed of typing. It's built on a few core principles:
 
@@ -24,9 +24,38 @@ This project aims to be the perfect, minimalist companion for developers, writer
 * **Standard Directories**: Follows platform-specific conventions for data storage.
 * **Configurable**: Respects standard environment variables like `$EDITOR` and `$JOT_DIR`.
 
+Of course. Now that you've selected a package name and are preparing to publish, updating the installation instructions is the perfect next step.
+
+A good README should always present the simplest installation method first. For end-users, installing from `crates.io` is much easier than building from source.
+
+Here is the revised `Installation` section for your `README.md`. You can replace the existing `Installation` section with this new, more comprehensive one.
+
 ## Installation
 
-Currently, you must build from source.
+There are two ways to install `jot`. The recommended method for most users is to install from `crates.io`.
+
+### From Crates.io (Recommended)
+
+This method automatically downloads, compiles, and installs `jot` on your system.
+
+**1. Install the Rust toolchain**
+
+First, if you don't already have it, install the Rust toolchain from the official site: [rustup.rs](https://rustup.rs/). This will provide you with `cargo`, Rust's package manager.
+
+**2. Install `jot`**
+
+Once `cargo` is installed, you can install `jot` with the following command:
+
+```sh
+# Note: Replace 'jot-rs' with your final chosen package name on crates.io
+cargo install jot-rs
+```
+
+This will place the `jot` executable in your cargo binary path (usually `~/.cargo/bin/`), making it available from anywhere in your terminal.
+
+### From source
+
+Alternatively, if you want to build the very latest version directly from the source code:
 
 ```sh
 # Clone the repository
@@ -36,9 +65,8 @@ cd jot
 # Build and install the binary
 cargo install --path .
 ```
-Once published, it will be available via `cargo install jot-cli`.
 
-### Where Notes Are Stored
+### Where notes are stored
 
 `jot` respects platform-specific conventions to avoid cluttering your home directory. By default, notes are stored in the `entries` sub-folder of:
 
@@ -50,27 +78,27 @@ You can always override this default location by setting the `$JOT_DIR` environm
 
 ## Usage
 
-### Create a quick note
+Create a quick note:
 ```sh
 ❯ jot 'This is a quick thought I want to save!'
 ```
 
-### Create a tagged, one-liner note
+Create a tagged, one-liner note:
 ```sh
 ❯ jot 'A great idea for the project' --tags idea,project
 ```
 
-### Create a longer note using Vim (or your `$EDITOR`)
+Create a longer note using Vim (or your `$EDITOR`):
 ```sh
 ❯ jot new
 ```
 
-### List your recent notes
+List your recent notes:
 ```sh
 ❯ jot list
 ```
 
-### Find notes by content or tags
+Find notes by content or tags:
 ```sh
 ❯ jot find "secret project"
 ❯ jot tags idea cli
@@ -104,12 +132,12 @@ If you must use double quotes (e.g., to expand a variable), you can escape the s
 
 `jot` is under active development. Here is the plan for upcoming features:
 
--   [ ] **Templates & Time-Based Views**
+-   [ ] **Templates and time-based views**
     -   [ ] Custom templates for `jot new` (e.g., `jot new --template meeting`).
     -   [ ] `jot today`: View all notes from the current day.
     -   [ ] `jot this-week`: View all notes from the current week.
     -   [ ] `jot <date> --compile`: Compile notes from a time range into a single summary file.
--   [ ] **Power Features**
+-   [ ] **Power features**
     -   [ ] `jot init --git`: Native `git` integration for versioning and sync.
     -   [ ] `jot init --encrypt`: Transparent, on-disk file encryption using `age`.
     -   [ ] `jot remind`: Set system-level reminders (e.g., `jot remind me in 1 hour to...`).

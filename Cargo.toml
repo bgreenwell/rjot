@@ -1,5 +1,5 @@
 [package]
-name = "jot-rs"
+name = "jot-cli"
 version = "0.1.0"
 edition = "2021"
 description = "A minimalist, command-line journal that's fast, private, and git-friendly."
