@@ -1,15 +1,13 @@
+use anyhow::{bail, Context, Result};
+use chrono::{Datelike, Local, NaiveDate};
+use clap::{Parser, Subcommand};
+use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
-use chrono::{Datelike, Local, NaiveDate, Weekday};
-use clap::{Parser, Subcommand};
-use serde::Deserialize;
-
-// --- Data Structures (Unchanged) ---
 #[derive(Debug, Deserialize, Default)]
 struct Frontmatter {
     tags: Option<Vec<String>>,
@@ -22,7 +20,7 @@ struct Note {
     content: String,
 }
 
-// --- Clap CLI Definition (Updated for new commands) ---
+// --- Clap CLI Definition (Unchanged) ---
 #[derive(Parser, Debug)]
 #[command(name = "rjot", version, about = "A minimalist, command-line journal.")]
 struct Cli {
@@ -47,11 +45,13 @@ enum Commands {
     List,
     /// Find jots by searching their content
     Find {
+        /// Text to search for in the content of your jots
         #[arg(required = true)]
         query: String,
     },
     /// List jots that have specific tags
     Tags {
+        /// Tags to filter by
         #[arg(required = true)]
         tags: Vec<String>,
     },
@@ -63,7 +63,7 @@ enum Commands {
     },
     /// List jots from yesterday
     Yesterday {
-        #[arg(long, short)]
+        #[arg(required = true)]
         compile: bool,
     },
     /// List jots from this week
@@ -72,8 +72,6 @@ enum Commands {
         compile: bool,
     },
 }
-
-// --- Helper Functions ---
 
 fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
@@ -152,7 +150,6 @@ fn compile_notes(notes: Vec<Note>) -> Result<()> {
     Ok(())
 }
 
-// --- Main Entrypoint ---
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let entries_dir = get_entries_dir()?;
@@ -172,29 +169,23 @@ fn main() -> Result<()> {
             }
             Commands::Week { compile } => command_by_week(&entries_dir, compile)?,
         }
-    } else {
-        if cli.message.is_empty() {
-            if cli.tags.is_some() {
-                bail!(
-                    "The --tags argument can only be used when creating a new rjot with a message."
-                );
-            }
-            println!(
-                "No message provided. Use 'rjot \"your message\"' or a subcommand like 'rjot new'."
-            );
-            println!("\nFor more information, try '--help'");
-        } else {
-            let message = cli.message.join(" ");
-            command_now(&entries_dir, &message, cli.tags)?;
+    } else if cli.message.is_empty() {
+        if cli.tags.is_some() {
+            bail!("The --tags argument can only be used when creating a new rjot with a message.");
         }
+        println!(
+            "No message provided. Use 'rjot \"your message\"' or a subcommand like 'rjot new'."
+        );
+        println!("\nFor more information, try '--help'");
+    } else {
+        let message = cli.message.join(" ");
+        command_now(&entries_dir, &message, cli.tags)?;
     }
 
     Ok(())
 }
 
-// --- Command Logic ---
-
-fn command_now(entries_dir: &PathBuf, message: &str, tags: Option<Vec<String>>) -> Result<()> {
+fn command_now(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
     let mut content = String::new();
     if let Some(tags) = tags {
         if !tags.is_empty() {
@@ -216,7 +207,7 @@ fn command_now(entries_dir: &PathBuf, message: &str, tags: Option<Vec<String>>) 
     Ok(())
 }
 
-fn command_new(entries_dir: &PathBuf, template_name: Option<String>) -> Result<()> {
+fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
     let editor =
         env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
     let now = Local::now();
@@ -322,7 +313,8 @@ fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 
     let mut matches = Vec::new();
     for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
-        let filename = entry.file_name().to_string_lossy();
+        // MODIFIED: Convert the Cow<str> to an owned String to fix the lifetime error.
+        let filename = entry.file_name().to_string_lossy().to_string();
         if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
             if date >= week_start && date <= today {
                 matches.push(parse_note_from_file(&entry.path())?);
