@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
@@ -61,8 +61,8 @@ fn get_jot_dir() -> Result<PathBuf> {
     let path = match env::var("JOT_DIR") {
         Ok(val) => PathBuf::from(val),
         Err(_) => {
-            let mut config_dir = dirs::config_dir()
-                .with_context(|| "Could not find a valid config directory.")?;
+            let mut config_dir =
+                dirs::config_dir().with_context(|| "Could not find a valid config directory.")?;
             config_dir.push("jot");
             config_dir
         }
@@ -81,8 +81,8 @@ fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
 
-    let file_content = fs::read_to_string(path)
-        .with_context(|| format!("Could not read file: {:?}", path))?;
+    let file_content =
+        fs::read_to_string(path).with_context(|| format!("Could not read file: {:?}", path))?;
 
     if file_content.starts_with("---") {
         if let Some(end_frontmatter) = file_content.get(3..).and_then(|s| s.find("---")) {
@@ -92,7 +92,11 @@ fn parse_note_from_file(path: &Path) -> Result<Note> {
             let frontmatter: Frontmatter = serde_yaml::from_str(frontmatter_str)
                 .with_context(|| format!("Failed to parse YAML frontmatter in {:?}", path))?;
 
-            return Ok(Note { id, frontmatter, content });
+            return Ok(Note {
+                id,
+                frontmatter,
+                content,
+            });
         }
     }
 
@@ -120,9 +124,13 @@ fn main() -> Result<()> {
         if cli.message.is_empty() {
             // If tags are provided without a message, show an error.
             if cli.tags.is_some() {
-                bail!("The --tags argument can only be used when creating a new jot with a message.");
+                bail!(
+                    "The --tags argument can only be used when creating a new jot with a message."
+                );
             }
-            println!("No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'.");
+            println!(
+                "No message provided. Use 'jot \"your message\"' or a subcommand like 'jot new'."
+            );
             println!("\nFor more information, try '--help'");
         } else {
             let message = cli.message.join(" ");
@@ -165,8 +173,8 @@ fn command_now(jot_dir: &PathBuf, message: &str, tags: Option<Vec<String>>) -> R
 
 /// Handles the `jot new` subcommand.
 fn command_new(jot_dir: &PathBuf) -> Result<()> {
-    let editor = env::var("EDITOR")
-        .with_context(|| "The '$EDITOR' environment variable is not set.")?;
+    let editor =
+        env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
 
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
