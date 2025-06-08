@@ -135,7 +135,7 @@ fn display_note_list(notes: Vec<Note>) {
         println!("\nNo jots found.");
         return;
     }
-    println!("\n{:<22} {}", "ID", "FIRST LINE OF CONTENT");
+    println!("\n{:<22} FIRST LINE OF CONTENT", "ID");
     println!("{:-<22} {:-<50}", "", "");
     for note in notes {
         let first_line = note.content.lines().next().unwrap_or("").trim();
