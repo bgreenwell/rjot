@@ -1,4 +1,4 @@
-# rjot <img src="assets/logo.png" align="right" height="120" alt="rjot logo" />
+# rjot <img src="assets/logo-color.png" align="right" height="120" alt="rjot logo" />
 
 A minimalist, command-line jotting utility that's fast, private, and git-friendly.
 

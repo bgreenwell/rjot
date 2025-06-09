@@ -129,15 +129,18 @@ fn test_show_edit_delete_last() -> TestResult {
         .stdout(predicate::str::contains("second note"));
 
     // Test edit --last=2
-    let editor_script_content = "#!/bin/sh\necho 'edited content' > \"$1\"";
-    let script_path = temp_dir.path().join("editor.sh");
-    fs::write(&script_path, editor_script_content)?;
-
-    // Make the script executable only on Unix platforms
+    let script_path;
     #[cfg(unix)]
     {
+        script_path = temp_dir.path().join("editor.sh");
+        fs::write(&script_path, "#!/bin/sh\necho 'edited content' > \"$1\"")?;
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
+    }
+    #[cfg(windows)]
+    {
+        script_path = temp_dir.path().join("editor.bat");
+        fs::write(&script_path, "@echo edited content > %1")?;
     }
 
     Command::cargo_bin("rjot")?
