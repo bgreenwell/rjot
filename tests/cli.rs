@@ -1,4 +1,4 @@
-use assert_cmd::Command; // Brings in `CommandCargoExt` for `main_binary`
+use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use std::path::PathBuf;
@@ -37,7 +37,7 @@ fn test_misspelled_command_is_a_note() -> TestResult {
     cmd.arg("lisy") // A typo for "list"
         .env("RJOT_DIR", &rjot_dir)
         .assert()
-        .success()
+        .success() // This should succeed based on our final design decision
         .stdout(predicate::str::contains("Jotting down: \"lisy\""));
 
     let entries_dir = rjot_dir.join("entries");
@@ -132,10 +132,13 @@ fn test_show_edit_delete_last() -> TestResult {
     let editor_script_content = "#!/bin/sh\necho 'edited content' > \"$1\"";
     let script_path = temp_dir.path().join("editor.sh");
     fs::write(&script_path, editor_script_content)?;
-    fs::set_permissions(
-        &script_path,
-        std::os::unix::fs::PermissionsExt::from_mode(0o755),
-    )?;
+
+    // Make the script executable only on Unix platforms
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
+    }
 
     Command::cargo_bin("rjot")?
         .arg("edit")
