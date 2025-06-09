@@ -125,7 +125,7 @@ struct InfoArgs {
     stats: bool,
 }
 
-// Helper functions 
+// Helper functions
 fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -338,7 +338,7 @@ fn get_note_path_for_action(
     }
 }
 
-// Command logic 
+// Command logic
 
 fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
     // ...
@@ -594,7 +594,7 @@ fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;  // Import everything from the parent module (our main.rs)
+    use super::*; // Import everything from the parent module (our main.rs)
 
     #[test]
     fn test_ordinal_suffix() {
