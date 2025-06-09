@@ -5,34 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2025-06-07
+## [0.1.0](https://github.com/bgreenwell/rjot/releases/tag/v0.1.0) - 2025-06-08
 
-This is the initial public release of `rjot` on crates.io. This version includes the core functionality for creating, finding, and organizing notes from the command line.
+This is the initial public release of `rjot`. This version provides a comprehensive, file-based journaling system with a focus on a robust command-line experience.
 
 ### Added
 
-#### Core Note Creation
-- Initial implementation of `rjot "<message>"` to instantly create a note from a string argument.
-- Added `rjot new` subcommand to create long-form notes by launching the system's default editor (defined by `$EDITOR`).
+#### Core note creation
+- A default command to instantly create a note from a string argument (e.g., `rjot 'My new idea'`).
+- The `new` subcommand to create long-form notes by launching the system's default editor (`$EDITOR`).
+- The `--tags` (or `-t`) flag to add metadata when creating a note. It accepts both comma-separated and space-separated values.
+- A template system for the `new` command, which uses a `default.md` template or a user-specified template via `rjot new --template <name>`.
 
-#### Note Retrieval & Organization
-- Added `rjot list` subcommand to display a summary of the 10 most recent notes.
-- Introduced support for YAML frontmatter (e.g., for tags) at the top of note files.
-- Added `rjot tags <tag>...` subcommand to filter and display notes that contain one or more specified tags in their frontmatter.
-- Added `rjot find <keyword>` subcommand for a case-insensitive, full-text search of the content of all notes.
+#### Note retrieval and filtering
+- The `list` subcommand to display a summary of the 10 most recent notes.
+- Support for YAML frontmatter at the top of note files for metadata.
+- The `find` subcommand for case-insensitive, full-text search of all note content.
+- The `tags` subcommand to filter and display notes that contain one or more specified tags.
+- Time-based filtering commands: `today`, `yesterday`, and `week`.
+- The `on <date>` subcommand to filter notes for a specific date (`YYYY-MM-DD`) or a date range (`YYYY-MM-DD..YYYY-MM-DD`).
+- The `--compile` flag for all time-based commands to generate a single summary document.
 
-#### Command-Line Experience
-- Added `--tags` (and short-form `-t`) flag to allow adding tags directly when creating a one-liner note (e.g., `rjot "My idea" -t idea`).
-- Support for comma-separated values with the `--tags` flag (e.g., `-t idea,project`).
+#### Note management
+- The `show` subcommand to display the full content of a specific note in the terminal.
+- The `edit` subcommand to open an existing note in the default editor.
+- The `delete` subcommand (with `rm` alias) to safely remove a note, with a confirmation prompt.
+- The `--force` flag for `delete` to bypass the confirmation prompt.
+- The `--last=<N>` flag for `show`, `edit`, and `delete` to easily target the Nth most recent note (e.g., `--last` is the same as `--last=1`).
 
-#### Configuration & File System
-- Notes are stored in a dedicated `entries` directory inside a main `rjot` folder.
-- The `rjot` folder respects platform-specific conventions by default, using the `dirs` crate:
-  - **macOS:** `~/Library/Application Support/rjot/`
-  - **Linux:** `~/.config/rjot/`
-  - **Windows:** `%APPDATA%\rjot\`
+#### Utility and configuration
+- The `info` subcommand with `--paths` to display storage locations and `--stats` to show total note count and tag frequency.
+- Notes are stored in platform-specific standard locations (`~/Library/Application Support/rjot` on macOS, `~/.config/rjot` on Linux).
 - Support for overriding the default storage location with the `$RJOT_DIR` environment variable.
 
-#### Project Scaffolding
-- Initialized project with a `README.md`, MIT License, project logo, and installation instructions.
-- Set up the package name and binary name in `Cargo.toml` for publishing to crates.io.
+#### Project health and documentation
+- A full integration test suite using `assert_cmd` to verify all command functionality.
+- A GitHub Actions workflow for Continuous Integration (CI) that checks formatting, runs Clippy, and executes the test suite on Linux, macOS, and Windows.
+- A comprehensive `README.md` with usage examples and project details.
+- A `LICENSE` file (MIT).

@@ -10,7 +10,7 @@ use chrono::{Datelike, Local, NaiveDate};
 use clap::{Args, Parser, Subcommand};
 use serde::Deserialize;
 
-// --- Data Structures (Unchanged) ---
+// Data structures
 #[derive(Debug, Deserialize, Default)]
 struct Frontmatter {
     tags: Option<Vec<String>>,
@@ -23,7 +23,7 @@ struct Note {
     content: String,
 }
 
-// --- Clap CLI Definition (Updated) ---
+// Clap CLI definition
 #[derive(Parser, Debug)]
 #[command(name = "rjot", version, about = "A minimalist, command-line journal.")]
 struct Cli {
@@ -125,7 +125,7 @@ struct InfoArgs {
     stats: bool,
 }
 
-// --- Helper functions ---
+// Helper functions 
 fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -272,7 +272,7 @@ fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathB
         .with_context(|| "Failed to get entry at calculated index. This is an unexpected error.")
 }
 
-// --- Main Entrypoint ---
+// Main entrypoint
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let entries_dir = get_entries_dir()?;
@@ -338,7 +338,7 @@ fn get_note_path_for_action(
     }
 }
 
-// --- Command Logic ---
+// Command logic 
 
 fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
     // ...
@@ -594,7 +594,7 @@ fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*; // Import everything from the parent module (our main.rs)
+    use super::*;  // Import everything from the parent module (our main.rs)
 
     #[test]
     fn test_ordinal_suffix() {
