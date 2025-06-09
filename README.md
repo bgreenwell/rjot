@@ -45,7 +45,7 @@ This method automatically downloads, compiles, and installs `rjot` on your syste
 
 To build the very latest version directly from the source code:
 ```sh
-git clone https://github.com/YOUR_USERNAME/rjot.git
+git clone https://github.com/bgreenwell/rjot.git
 cd rjot
 cargo install --path .
 ```
