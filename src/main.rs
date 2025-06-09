@@ -591,3 +591,24 @@ fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*; // Import everything from the parent module (our main.rs)
+
+    #[test]
+    fn test_ordinal_suffix() {
+        assert_eq!(get_ordinal_suffix(1), "st");
+        assert_eq!(get_ordinal_suffix(2), "nd");
+        assert_eq!(get_ordinal_suffix(3), "rd");
+        assert_eq!(get_ordinal_suffix(4), "th");
+        assert_eq!(get_ordinal_suffix(10), "th");
+        assert_eq!(get_ordinal_suffix(11), "th");
+        assert_eq!(get_ordinal_suffix(12), "th");
+        assert_eq!(get_ordinal_suffix(13), "th");
+        assert_eq!(get_ordinal_suffix(21), "st");
+        assert_eq!(get_ordinal_suffix(22), "nd");
+        assert_eq!(get_ordinal_suffix(23), "rd");
+        assert_eq!(get_ordinal_suffix(101), "st");
+    }
+}
