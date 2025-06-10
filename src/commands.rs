@@ -1,0 +1,309 @@
+use std::collections::HashMap;
+use std::fs;
+use std::io::{self, Read, Write}; // Correctly import the 'Read' trait
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{bail, Result}; // Removed unused 'Context' import
+use chrono::{Datelike, Local, NaiveDate};
+
+use crate::cli::{InfoArgs, TagAction, TagArgs};
+use crate::helpers::{
+    self, display_note_list, get_note_path_for_action, get_templates_dir, parse_note_from_file,
+    Frontmatter,
+};
+
+// This file contains the logic for executing each command.
+
+pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
+    let mut content = String::new();
+    if let Some(tags) = tags {
+        if !tags.is_empty() {
+            let frontmatter = Frontmatter { tags };
+            let fm_str = serde_yaml::to_string(&frontmatter)?;
+            content.push_str("---\n");
+            content.push_str(&fm_str);
+            content.push_str("---\n\n");
+        }
+    }
+    content.push_str(message);
+    println!("Jotting down: \"{}\"", message);
+    let now = Local::now();
+    let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
+    let file_path = entries_dir.join(filename);
+    fs::write(&file_path, content)?;
+    println!("Successfully saved to {:?}", file_path);
+    Ok(())
+}
+
+pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
+    let editor = helpers::get_editor()?;
+    let now = Local::now();
+    let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
+    let file_path = entries_dir.join(filename);
+    let tpl_name = template_name.unwrap_or_else(|| "default.md".to_string());
+    let templates_dir = get_templates_dir()?;
+    let tpl_path = templates_dir.join(tpl_name);
+    let mut initial_content = String::new();
+    if tpl_path.exists() {
+        let now_str = now.to_rfc3339();
+        initial_content = fs::read_to_string(tpl_path)?.replace("{{date}}", &now_str);
+    }
+    fs::write(&file_path, initial_content)?;
+    let status = Command::new(&editor).arg(&file_path).status()?;
+    if !status.success() {
+        bail!("Editor exited with a non-zero status.");
+    }
+    let mut file = fs::File::open(&file_path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    if contents.trim().is_empty() {
+        fs::remove_file(&file_path)?;
+        println!("Empty jot discarded.");
+    } else {
+        println!("Successfully saved to {:?}", file_path);
+    }
+    Ok(())
+}
+
+pub fn command_edit(note_path: PathBuf) -> Result<()> {
+    let editor = helpers::get_editor()?;
+    println!(
+        "Opening {:?} in {}...",
+        &note_path.file_name().unwrap(),
+        &editor
+    );
+    let status = Command::new(&editor).arg(&note_path).status()?;
+    if !status.success() {
+        bail!("Editor exited with a non-zero status.");
+    }
+    println!("Finished editing {:?}.", &note_path.file_name().unwrap());
+    Ok(())
+}
+
+pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
+    let (id_prefix, last) = match &args.action {
+        TagAction::Add {
+            id_prefix, last, ..
+        }
+        | TagAction::Remove {
+            id_prefix, last, ..
+        }
+        | TagAction::Set {
+            id_prefix, last, ..
+        } => (id_prefix.as_ref(), *last),
+    };
+
+    let note_path = get_note_path_for_action(entries_dir, id_prefix.cloned(), last)?;
+    let mut note = parse_note_from_file(&note_path)?;
+
+    match args.action {
+        TagAction::Add { tags, .. } => {
+            for tag in tags {
+                if !note.frontmatter.tags.contains(&tag) {
+                    note.frontmatter.tags.push(tag);
+                }
+            }
+            println!("Added tags to '{}'.", note.id);
+        }
+        TagAction::Remove { tags, .. } => {
+            note.frontmatter.tags.retain(|t| !tags.contains(t));
+            println!("Removed tags from '{}'.", note.id);
+        }
+        TagAction::Set { tags, .. } => {
+            note.frontmatter.tags = tags;
+            println!("Set tags for '{}'.", note.id);
+        }
+    }
+    note.frontmatter.tags.sort();
+    note.frontmatter.tags.dedup();
+
+    let new_frontmatter_str = serde_yaml::to_string(&note.frontmatter)?;
+    let new_content = format!("---\n{}---\n\n{}", new_frontmatter_str, note.content);
+    fs::write(&note.path, new_content)?;
+
+    Ok(())
+}
+
+pub fn command_list(entries_dir: &PathBuf) -> Result<()> {
+    let entries = fs::read_dir(entries_dir)?;
+    let mut notes = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        notes.push(parse_note_from_file(&entry.path())?);
+    }
+    notes.sort_by(|a, b| b.id.cmp(&a.id));
+    notes.truncate(10);
+    display_note_list(notes);
+    Ok(())
+}
+
+pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
+    println!("Searching for \"{}\" in your jots...", query);
+    let entries = fs::read_dir(entries_dir)?;
+    let mut matches = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let note = parse_note_from_file(&entry.path())?;
+        if note.content.to_lowercase().contains(&query.to_lowercase()) {
+            matches.push(note);
+        }
+    }
+    display_note_list(matches);
+    Ok(())
+}
+
+pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
+    println!("Filtering by tags: {:?}", tags);
+    let entries = fs::read_dir(entries_dir)?;
+    let mut matches = Vec::new();
+    for entry in entries.filter_map(Result::ok) {
+        let note = parse_note_from_file(&entry.path())?;
+        if note.frontmatter.tags.iter().any(|t| tags.contains(t)) {
+            matches.push(note);
+        }
+    }
+    display_note_list(matches);
+    Ok(())
+}
+
+pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
+    let date_prefix = date.format("%Y-%m-%d").to_string();
+    println!("Finding jots from {}...", date_prefix);
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(&date_prefix)
+        {
+            matches.push(parse_note_from_file(&entry.path())?);
+        }
+    }
+    matches.sort_by(|a, b| a.id.cmp(&b.id));
+    if compile {
+        helpers::compile_notes(matches)?
+    } else {
+        display_note_list(matches)
+    }
+    Ok(())
+}
+
+pub fn command_today(entries_dir: &PathBuf, compile: bool) -> Result<()> {
+    command_by_date_filter(entries_dir, Local::now().date_naive(), compile)
+}
+
+pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
+    let yesterday = Local::now().date_naive() - chrono::Duration::days(1);
+    command_by_date_filter(entries_dir, yesterday, compile)
+}
+
+pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
+    let today = Local::now().date_naive();
+    let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
+    println!("Finding jots from this week (starting {})...", week_start);
+    let mut matches = Vec::new();
+    for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+        let filename = entry.file_name().to_string_lossy().to_string();
+        if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
+            if date >= week_start && date <= today {
+                matches.push(parse_note_from_file(&entry.path())?);
+            }
+        }
+    }
+    matches.sort_by(|a, b| a.id.cmp(&b.id));
+    if compile {
+        helpers::compile_notes(matches)?
+    } else {
+        display_note_list(matches)
+    }
+    Ok(())
+}
+
+pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
+    let mut matches = Vec::new();
+    if let Some((start_str, end_str)) = date_spec.split_once("..") {
+        let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
+        let end_date = NaiveDate::parse_from_str(end_str, "%Y-%m-%d")?;
+        println!("Finding jots from {} to {}...", start_date, end_date);
+        for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+            let filename = entry.file_name().to_string_lossy().to_string();
+            if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
+                if date >= start_date && date <= end_date {
+                    matches.push(parse_note_from_file(&entry.path())?);
+                }
+            }
+        }
+    } else {
+        let date = NaiveDate::parse_from_str(date_spec, "%Y-%m-%d")?;
+        return command_by_date_filter(entries_dir, date, compile);
+    }
+    matches.sort_by(|a, b| a.id.cmp(&b.id));
+    if compile {
+        helpers::compile_notes(matches)?
+    } else {
+        display_note_list(matches)
+    }
+    Ok(())
+}
+
+pub fn command_show(note_path: PathBuf) -> Result<()> {
+    let content = fs::read_to_string(&note_path)?;
+    println!("{}", content);
+    Ok(())
+}
+
+pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
+    let filename = note_path.file_name().unwrap().to_string_lossy();
+    if !force {
+        print!("Are you sure you want to delete '{}'? [y/N] ", filename);
+        io::stdout().flush()?;
+        let mut confirmation = String::new();
+        io::stdin().read_line(&mut confirmation)?;
+        if confirmation.trim().to_lowercase() != "y" {
+            println!("Deletion aborted.");
+            return Ok(());
+        }
+    }
+    fs::remove_file(&note_path)?;
+    println!("Successfully deleted '{}'.", filename);
+    Ok(())
+}
+
+pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
+    if !args.paths && !args.stats {
+        println!(
+            "Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`"
+        );
+        println!("\nFor more information, try '--help'");
+        return Ok(());
+    }
+    if args.paths {
+        println!("--- rjot paths ---");
+        println!("Root Directory:  {:?}", helpers::get_rjot_dir_root()?);
+        println!("Entries:         {:?}", entries_dir);
+        println!("Templates:       {:?}", helpers::get_templates_dir()?);
+    }
+    if args.stats {
+        println!("\n--- rjot stats ---");
+        let entries = fs::read_dir(entries_dir)?;
+        let mut note_count = 0;
+        let mut tag_counts: HashMap<String, usize> = HashMap::new();
+        for entry in entries.filter_map(Result::ok) {
+            note_count += 1;
+            let note = parse_note_from_file(&entry.path())?;
+            for tag in note.frontmatter.tags {
+                *tag_counts.entry(tag).or_insert(0) += 1;
+            }
+        }
+        println!("Total jots: {}", note_count);
+        if !tag_counts.is_empty() {
+            let mut sorted_tags: Vec<_> = tag_counts.into_iter().collect();
+            sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
+            sorted_tags.truncate(5);
+            println!("\nMost common tags:");
+            for (tag, count) in sorted_tags {
+                println!("  - {} ({})", tag, count);
+            }
+        }
+    }
+    Ok(())
+}

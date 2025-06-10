@@ -56,7 +56,7 @@ fn test_tagged_jot_creation() -> TestResult {
 
     let mut cmd = Command::cargo_bin("rjot")?;
     cmd.arg("a tagged note")
-        .args(&["--tags", "rust,project"])
+        .args(["--tags", "rust,project"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success();
@@ -202,13 +202,13 @@ fn test_tag_management() -> TestResult {
         .success();
 
     Command::cargo_bin("rjot")?
-        .args(&["tag", "add", "--last=1", "rust", "testing"])
+        .args(["tag", "add", "--last=1", "rust", "testing"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success();
 
     Command::cargo_bin("rjot")?
-        .args(&["show", "--last"])
+        .args(["show", "--last"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
@@ -216,13 +216,13 @@ fn test_tag_management() -> TestResult {
         .stdout(predicate::str::contains("- testing"));
 
     Command::cargo_bin("rjot")?
-        .args(&["tag", "rm", "--last=1", "testing"])
+        .args(["tag", "rm", "--last=1", "testing"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success();
 
     Command::cargo_bin("rjot")?
-        .args(&["show", "--last"])
+        .args(["show", "--last"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
@@ -230,13 +230,13 @@ fn test_tag_management() -> TestResult {
         .stdout(predicate::str::contains("testing").not());
 
     Command::cargo_bin("rjot")?
-        .args(&["tag", "set", "--last=1", "final,done"])
+        .args(["tag", "set", "--last=1", "final,done"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success();
 
     Command::cargo_bin("rjot")?
-        .args(&["show", "--last"])
+        .args(["show", "--last"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
@@ -322,7 +322,7 @@ fn test_new_with_template() -> TestResult {
     fs::write(templates_dir.join("daily.md"), "tags:\n  - daily")?;
 
     Command::cargo_bin("rjot")?
-        .args(&["new", "--template", "daily.md"])
+        .args(["new", "--template", "daily.md"])
         .env("RJOT_DIR", &rjot_dir)
         .env("EDITOR", "true") // Use `true` as a no-op editor
         .assert()
