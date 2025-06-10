@@ -1,21 +1,147 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs;
-use std::io::{self, Read, Write}; // Correctly import the 'Read' trait
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Result}; // Removed unused 'Context' import
+use anyhow::{bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
+use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
 
 use crate::cli::{InfoArgs, TagAction, TagArgs};
 use crate::helpers::{
-    self, display_note_list, get_note_path_for_action, get_templates_dir, parse_note_from_file,
-    Frontmatter,
+    self, display_note_list, get_note_path_for_action, get_rjot_dir_root, get_templates_dir,
+    parse_note_from_file, Frontmatter,
 };
 
 // This file contains the logic for executing each command.
 
+pub fn command_init(git: bool) -> Result<()> {
+    let root_dir = get_rjot_dir_root()?;
+    println!("rjot directory is at: {:?}", root_dir);
+
+    if git {
+        match Repository::init(&root_dir) {
+            Ok(_) => println!("Initialized a new Git repository in {:?}", root_dir),
+            Err(e) if e.code() == git2::ErrorCode::Exists => {
+                println!("Git repository already exists in {:?}", root_dir)
+            }
+            Err(e) => bail!("Failed to initialize Git repository: {}", e),
+        }
+    }
+    Ok(())
+}
+
+pub fn command_sync() -> Result<()> {
+    let root_dir = get_rjot_dir_root()?;
+    let repo = Repository::open(&root_dir).map_err(|_| {
+        anyhow::anyhow!(
+            "rjot directory at {:?} is not a Git repository. Run `rjot init --git` first.",
+            root_dir
+        )
+    })?;
+
+    println!("Staging all changes...");
+    let mut index = repo.index()?;
+    index.add_all(["."].iter(), git2::IndexAddOption::DEFAULT, None)?;
+    index.write()?;
+
+    let oid = index.write_tree()?;
+    let tree = repo.find_tree(oid)?;
+
+    let signature = Signature::now("rjot", "rjot@localhost")?;
+    let commit_message = format!("rjot sync: {}", Local::now().to_rfc2822());
+
+    let head = repo.head();
+    let parent_commits = match head {
+        Ok(head_ref) => vec![head_ref.peel_to_commit()?],
+        Err(ref e) if e.code() == git2::ErrorCode::UnbornBranch => Vec::new(),
+        Err(e) => return Err(e.into()),
+    };
+
+    let parents_ref: Vec<&git2::Commit> = parent_commits.iter().collect();
+
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        &commit_message,
+        &tree,
+        &parents_ref,
+    )?;
+
+    println!("Committed changes with message: '{}'", commit_message);
+
+    let head = repo.head()?;
+    let branch_name = head.shorthand().with_context(|| {
+        "Could not get branch name from HEAD. Are you in a detached HEAD state?"
+    })?;
+    let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
+
+    let mut remote = repo.find_remote("origin").map_err(|_| {
+        anyhow::anyhow!(
+            "Could not find remote 'origin'. Please add a remote to your git repository."
+        )
+    })?;
+
+    // --- Final, Robust Authentication Logic ---
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.credentials(|_url, username_from_git, allowed_types| {
+        let username = username_from_git.unwrap_or("git");
+
+        // 1. Try GITHUB_TOKEN env var for HTTPS remotes.
+        if allowed_types.is_user_pass_plaintext() {
+            if let Ok(token) = env::var("GITHUB_TOKEN") {
+                return Cred::userpass_plaintext(username, &token);
+            }
+        }
+
+        // 2. Try SSH Agent (for ssh:// remotes)
+        if allowed_types.is_ssh_key() {
+            if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+                return Ok(cred);
+            }
+        }
+
+        // 3. Try default SSH key locations as a fallback
+        if allowed_types.is_ssh_key() {
+            if let Some(home_dir) = dirs::home_dir() {
+                if let Ok(cred) =
+                    Cred::ssh_key(username, None, &home_dir.join(".ssh").join("id_rsa"), None)
+                {
+                    return Ok(cred);
+                }
+            }
+        }
+
+        // 4. Try Git's built-in credential helper as a final fallback
+        if allowed_types.is_user_pass_plaintext() {
+            if let Ok(cred) = Cred::credential_helper(&repo.config()?, _url, Some(username)) {
+                return Ok(cred);
+            }
+        }
+
+        Err(git2::Error::new(
+            git2::ErrorCode::Auth,
+            git2::ErrorClass::Ssh,
+            "failed to acquire credentials",
+        ))
+    });
+
+    let mut push_options = PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+
+    println!("Pushing to remote 'origin' on branch '{}'...", branch_name);
+    remote.push(&[&refspec], Some(&mut push_options))?;
+
+    println!("Sync complete.");
+
+    Ok(())
+}
+
 pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
+    // ... same as before
     let mut content = String::new();
     if let Some(tags) = tags {
         if !tags.is_empty() {
@@ -37,6 +163,7 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
 }
 
 pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
+    // ... same as before
     let editor = helpers::get_editor()?;
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
@@ -67,6 +194,7 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
 }
 
 pub fn command_edit(note_path: PathBuf) -> Result<()> {
+    // ... same as before
     let editor = helpers::get_editor()?;
     println!(
         "Opening {:?} in {}...",
@@ -82,6 +210,7 @@ pub fn command_edit(note_path: PathBuf) -> Result<()> {
 }
 
 pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
+    // ... same as before
     let (id_prefix, last) = match &args.action {
         TagAction::Add {
             id_prefix, last, ..
@@ -126,6 +255,7 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
 }
 
 pub fn command_list(entries_dir: &PathBuf) -> Result<()> {
+    // ... same as before
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = Vec::new();
     for entry in entries.filter_map(Result::ok) {
@@ -138,6 +268,7 @@ pub fn command_list(entries_dir: &PathBuf) -> Result<()> {
 }
 
 pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
+    // ... same as before
     println!("Searching for \"{}\" in your jots...", query);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -152,6 +283,7 @@ pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
 }
 
 pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
+    // ... same as before
     println!("Filtering by tags: {:?}", tags);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -166,6 +298,7 @@ pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()>
 }
 
 pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
+    // ... same as before
     let date_prefix = date.format("%Y-%m-%d").to_string();
     println!("Finding jots from {}...", date_prefix);
     let mut matches = Vec::new();
@@ -197,6 +330,7 @@ pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 }
 
 pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
+    // ... same as before
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
     println!("Finding jots from this week (starting {})...", week_start);
@@ -219,6 +353,7 @@ pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 }
 
 pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
+    // ... same as before
     let mut matches = Vec::new();
     if let Some((start_str, end_str)) = date_spec.split_once("..") {
         let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
@@ -246,12 +381,14 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
 }
 
 pub fn command_show(note_path: PathBuf) -> Result<()> {
+    // ... same as before
     let content = fs::read_to_string(&note_path)?;
     println!("{}", content);
     Ok(())
 }
 
 pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
+    // ... same as before
     let filename = note_path.file_name().unwrap().to_string_lossy();
     if !force {
         print!("Are you sure you want to delete '{}'? [y/N] ", filename);
@@ -269,10 +406,9 @@ pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
 }
 
 pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
+    // ... same as before
     if !args.paths && !args.stats {
-        println!(
-            "Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`"
-        );
+        println!("Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`");
         println!("\nFor more information, try '--help'");
         return Ok(());
     }

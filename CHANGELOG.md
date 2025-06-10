@@ -11,6 +11,14 @@ This release focuses on quality-of-life improvements, robust error handling, and
 
 ### Added
 
+* A new `init` subcommand to initialize the `rjot` directory.
+
+*  The `--git` flag for the `init` command, which turns the `rjot` data directory into a local Git repository.
+
+* A new `sync` subcommand that automatically stages all changes, creates a timestamped commit, and pushes to a remote repository named `origin`.
+
+* The `sync` command now includes robust authentication logic that automatically handles both SSH and HTTPS (via a `GITHUB_TOKEN` environment variable) remotes.
+
 * A new `tag` subcommand was introduced to manage metadata on existing notes. It includes `add`, `rm` (remove), and `set` actions to modify tags without opening an editor.
 
 * The `--last=<N>` flag was added to `show`, `edit`, and `delete` commands, allowing users to easily target the Nth most recent note (e.g., `--last` for the last note, `--last=2` for the second to last).
@@ -24,6 +32,8 @@ This release focuses on quality-of-life improvements, robust error handling, and
 * A "pro-tip" section was added to the `README.md` with instructions on how to create a personal shell alias for `rjot` on all major operating systems.
 
 ### Changed
+
+* The project has been refactored into multiple source files (`main.rs`, `cli.rs`, `commands.rs`, `helpers.rs`) for better organization and maintainability.
 
 * The logic for finding an editor for the `new` and `edit` commands was improved. It now gracefully falls back to common editors like `vim` or `nano` if the `$EDITOR` environment variable is not set.
 

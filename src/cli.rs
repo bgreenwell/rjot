@@ -83,6 +83,15 @@ pub enum Commands {
     Info(InfoArgs),
     /// Manage tags on an existing jot
     Tag(TagArgs),
+    // NEW: Git-related commands
+    /// Initialize the rjot directory, optionally as a Git repository
+    Init {
+        /// Initialize the rjot directory as a Git repository
+        #[arg(long)]
+        git: bool,
+    },
+    /// Commit and push changes to a remote Git repository
+    Sync,
 }
 
 #[derive(Args, Debug)]

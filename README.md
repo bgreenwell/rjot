@@ -201,7 +201,69 @@ Use the `tag` subcommand to modify tags on an existing note without opening an e
 ❯ rjot info --stats
 ```
 
-## Pro-tip: create a personal alias
+### Git integration (optional)
+
+`rjot` offers a convenient, built-in way to version control and synchronize your notes using Git. This is an optional feature for users who are comfortable with Git concepts. You can always manage the repository manually by running `git` commands inside your `rjot` data directory.
+
+#### One-time setup
+
+1.  **Initialize `rjot` with Git:**
+    This command prepares your `rjot` data directory and initializes a Git repository inside it.
+    ```sh
+    ❯ rjot init --git
+    ```
+
+2.  **Create a private remote repository:**
+    Go to GitHub (or another Git provider) and create a new, empty **private** repository (e.g., named `my-journal`). Do not add a README or license file.
+
+3.  **Link the remote:**
+    Navigate into your `rjot` directory (`rjot info --paths` will show you where) and add the remote you just created.
+    ```sh
+    # Example for GitHub over SSH
+    ❯ git remote add origin git@github.com:YOUR_USERNAME/my-journal.git
+
+    # Example for GitHub over HTTPS
+    ❯ git remote add origin [https://github.com/YOUR_USERNAME/my-journal.git](https://github.com/YOUR_USERNAME/my-journal.git)
+    ```
+
+#### The `sync` command
+
+Once set up, you can use the `sync` command from anywhere to save your work.
+```sh
+❯ rjot sync
+```
+This single command will automatically:
+1.  Stage all your new and modified notes (`git add .`).
+2.  Create a commit with a timestamped message.
+3.  Push the changes to your `origin` remote on your current branch.
+
+#### How authentication works
+
+The `rjot sync` command is designed to be secure and work automatically with common Git authentication methods. It will try the following, in order:
+
+1.  **HTTPS (Personal Access Token):** If your remote URL uses `https://` and you have a `GITHUB_TOKEN` environment variable set, it will use that token for authentication.
+2.  **SSH Agent:** If your remote URL uses `ssh://` (or `git@`), it will first try to authenticate using your system's SSH agent.
+3.  **Default SSH Keys:** If the SSH agent fails, it will look for your default SSH key files (e.g., `~/.ssh/id_rsa`).
+4.  **Git Credential Helper:** As a final fallback, it will try to use Git's configured credential helper.
+
+
+## Configuration
+
+### File storage location
+
+`rjot` respects platform conventions. By default, notes are stored in the `entries` sub-folder of:
+
+* **macOS:** `~/Library/Application Support/rjot/`
+* **Linux:** `~/.config/rjot/`
+* **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\rjot\`
+
+You can always override this by setting the `$RJOT_DIR` environment variable.
+
+### Templates
+
+Create custom templates in the `templates` subdirectory of your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable: `{{date}}`, which will be replaced with the current timestamp.
+
+### Pro-tip: create a personal alias
 
 For faster, more ergonomic use, you can create a personal alias for `rjot`. This allows you to type a short command like `jd` instead of `rjot`.
 
@@ -240,22 +302,6 @@ Here’s how to set it up for your specific operating system:
 
 3.  **Apply the changes:**
     Close and reopen your PowerShell window, or run `. $PROFILE`.
-
-## Configuration
-
-### File storage location
-
-`rjot` respects platform conventions. By default, notes are stored in the `entries` sub-folder of:
-
-* **macOS:** `~/Library/Application Support/rjot/`
-* **Linux:** `~/.config/rjot/`
-* **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\rjot\`
-
-You can always override this by setting the `$RJOT_DIR` environment variable.
-
-### Templates
-
-Create custom templates in the `templates` subdirectory of your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable: `{{date}}`, which will be replaced with the current timestamp.
 
 ## Roadmap
 
