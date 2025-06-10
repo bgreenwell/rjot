@@ -1,10 +1,12 @@
 # rjot <img src="assets/logo-color.png" align="right" height="120" alt="rjot logo" />
 
-A minimalist, command-line jotting utility that's fast, private, and git-friendly.
+A minimalist, command-line jotting utility that's fast, private, git-friendly, and written in Rust.
 
 [![Build Status](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions)
 [![Crates.io](https://img.shields.io/crates/v/rjot.svg?label=crates.io)](https://crates.io/crates/rjot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
 
 ## The vision
 
@@ -20,8 +22,8 @@ This project aims to be the perfect, minimalist companion for developers, writer
 
 * **Instant capture**: Jot down a thought instantly from the command line.
 * **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
-* **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`).
-* **Note management**: Easily `show`, `edit`, or `delete` any note using a unique ID prefix or its recency (`--last`).
+* **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`, or `on <date-from>...<date-to>`).
+* **Note management**: Easily `show`, `edit`, `tag`, or `delete` any note using a unique ID prefix or its recency (`--last` or `--last=3`).
 * **Standard & configurable**: Follows platform-specific conventions for data storage and respects standard environment variables.
 
 ## Installation
@@ -56,15 +58,19 @@ cargo install --path .
 
 ### A note on shells and quotes
 
-Your command-line shell (like Bash or Zsh) can interpret special characters like `!` even inside double quotes (`"`). This can cause commands to fail or hang.
+Your command-line shell (like Bash or Zsh) can interpret special characters like `!` or expand variables like `$USER` inside double quotes (`"`). This can cause unexpected behavior.
 
 **The best practice is to always use single quotes (`'`) for your messages.** This tells the shell to treat every character literally.
+
 ```sh
-# GOOD: This works perfectly
+# GOOD: This works perfectly.
 ❯ rjot 'This is a great idea!'
 
 # BAD: This will probably fail!
 ❯ rjot "This is a great idea!"
+
+# OK (with escaping): If you must use double quotes, escape special characters.
+❯ rjot "Note for user: $USER. This is a great idea\!"
 ```
 
 ### Creating notes
@@ -160,6 +166,30 @@ This command will ask for confirmation unless you use the `--force` flag.
 ❯ rjot delete --last --force
 ```
 
+### Managing tags
+
+Use the `tag` subcommand to modify tags on an existing note without opening an editor.
+
+**Important:** The `tag` command requires you to target a note with either `--last=<N>` or `-p <ID_PREFIX>`.
+
+**1. Add tags to a note:**
+```sh
+# Add 'rust' and 'idea' to the last jot
+❯ rjot tag add --last=1 rust,idea
+```
+
+**2. Remove tags from a note:**
+```sh
+# Remove the 'idea' tag from a specific jot
+❯ rjot tag rm -p 2025-06-09 idea
+```
+
+**3. Overwrite all tags on a note:**
+```sh
+# Replace all tags on the 2nd to last jot with 'archived'
+❯ rjot tag set --last=2 archived
+```
+
 ### Utility commands
 
 **1. Get info about your setup:**
@@ -170,6 +200,46 @@ This command will ask for confirmation unless you use the `--force` flag.
 # Show note and tag statistics
 ❯ rjot info --stats
 ```
+
+## Pro-tip: create a personal alias
+
+For faster, more ergonomic use, you can create a personal alias for `rjot`. This allows you to type a short command like `jd` instead of `rjot`.
+
+Here’s how to set it up for your specific operating system:
+
+#### For macOS and Linux (zsh or bash)
+
+1.  **Identify your shell's config file:**
+    * If you're on a modern Mac, you are likely using `zsh`, so the file is `~/.zshrc`.
+    * On most Linux distributions, you are likely using `bash`, so the file is `~/.bashrc`.
+
+2.  **Add the alias to the file:**
+    Run the following command in your terminal.
+
+    ```sh
+    # For zsh (macOS) or bash (Linux)
+    echo "alias jd='rjot'" >> ~/.zshrc # Or ~/.bashrc
+    ```
+
+3.  **Apply the changes:**
+    For the changes to take effect, either close and reopen your terminal, or run `source ~/.zshrc` (or `source ~/.bashrc`).
+
+#### For Windows (PowerShell)
+
+1.  **Check for (or create) a profile file:**
+
+    ```powershell
+    if (!(Test-Path $PROFILE)) { New-Item -Path $PROFILE -Type File -Force }
+    ```
+
+2.  **Add the alias to your profile:**
+
+    ```powershell
+    Add-Content -Path $PROFILE -Value "function jd { rjot.exe @args }"
+    ```
+
+3.  **Apply the changes:**
+    Close and reopen your PowerShell window, or run `. $PROFILE`.
 
 ## Configuration
 

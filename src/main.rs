@@ -8,41 +8,41 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use clap::{Args, Parser, Subcommand};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use which::which;
 
-// Data structures
-#[derive(Debug, Deserialize, Default)]
+// --- Data Structures ---
+#[derive(Debug, Deserialize, Serialize, Default)]
 struct Frontmatter {
-    tags: Option<Vec<String>>,
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 #[derive(Debug, Default)]
 struct Note {
     id: String,
+    path: PathBuf,
     frontmatter: Frontmatter,
     content: String,
 }
 
-// Clap CLI definition
+// --- CLI Definition ---
 #[derive(Parser, Debug)]
 #[command(name = "rjot", version, about = "A minimalist, command-line journal.")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// The message to jot down. The default action if no subcommand is given.
-    message: Vec<String>,
-
-    /// Add tags to a new jot. Accepts multiple values, space or comma separated.
     #[arg(long, short, value_delimiter = ',', num_args(1..))]
     tags: Option<Vec<String>>,
+
+    message: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Create a new jot using an editor, optionally with a template
     New {
-        /// The name of the template to use
         #[arg(long, short)]
         template: Option<String>,
     },
@@ -55,7 +55,6 @@ enum Commands {
     },
     /// List jots that have specific tags
     Tags {
-        /// Tags to filter by (can be comma-separated or space-separated)
         #[arg(required = true, value_delimiter = ',')]
         tags: Vec<String>,
     },
@@ -76,7 +75,6 @@ enum Commands {
     },
     /// List jots from a specific date or date range
     On {
-        /// The date (YYYY-MM-DD) or range (YYYY-MM-DD..YYYY-MM-DD)
         #[arg(required = true)]
         date_spec: String,
         #[arg(long, short)]
@@ -84,37 +82,32 @@ enum Commands {
     },
     /// Open an existing jot in the default editor
     Edit {
-        /// The prefix of the jot ID to edit.
         #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Edit the Nth most recent jot (e.g., --last=1 or just --last).
         #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
         last: Option<usize>,
     },
     /// Display the full content of a jot in the terminal
     Show {
-        /// The prefix of the jot ID to show.
         #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Show the Nth most recent jot.
         #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
         last: Option<usize>,
     },
     /// Delete a jot with confirmation
     #[command(alias = "rm")]
     Delete {
-        /// The prefix of the jot ID to delete.
         #[arg(group = "target", required = true)]
         id_prefix: Option<String>,
-        /// Delete the Nth most recent jot.
         #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
         last: Option<usize>,
-        /// Force deletion without confirmation
         #[arg(long, short)]
         force: bool,
     },
     /// Display information about your rjot setup
     Info(InfoArgs),
+    /// Manage tags on an existing jot
+    Tag(TagArgs),
 }
 
 #[derive(Args, Debug)]
@@ -125,7 +118,45 @@ struct InfoArgs {
     stats: bool,
 }
 
-// Helper functions
+#[derive(Args, Debug)]
+struct TagArgs {
+    #[command(subcommand)]
+    action: TagAction,
+}
+
+#[derive(Subcommand, Debug)]
+enum TagAction {
+    /// Add one or more tags to a jot
+    Add {
+        #[arg(long, short = 'p', group = "target")]
+        id_prefix: Option<String>,
+        #[arg(long, short, group = "target")]
+        last: Option<usize>,
+        #[arg(required = true, value_delimiter = ',')]
+        tags: Vec<String>,
+    },
+    /// Remove one or more tags from a jot
+    #[command(alias = "rm")]
+    Remove {
+        #[arg(long, short = 'p', group = "target")]
+        id_prefix: Option<String>,
+        #[arg(long, short, group = "target")]
+        last: Option<usize>,
+        #[arg(required = true, value_delimiter = ',')]
+        tags: Vec<String>,
+    },
+    /// Overwrite all existing tags on a jot
+    Set {
+        #[arg(long, short = 'p', group = "target")]
+        id_prefix: Option<String>,
+        #[arg(long, short, group = "target")]
+        last: Option<usize>,
+        #[arg(required = true, value_delimiter = ',')]
+        tags: Vec<String>,
+    },
+}
+
+// --- Helper Functions ---
 fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -157,6 +188,27 @@ fn get_templates_dir() -> Result<PathBuf> {
     Ok(templates_dir)
 }
 
+fn get_editor() -> Result<String> {
+    if let Ok(editor) = env::var("EDITOR") {
+        if !editor.is_empty() {
+            return Ok(editor);
+        }
+    }
+    #[cfg(unix)]
+    let fallbacks = ["vim", "nvim", "nano"];
+    #[cfg(windows)]
+    let fallbacks = ["notepad.exe"];
+    #[cfg(not(any(unix, windows)))]
+    let fallbacks: [&str; 0] = [];
+
+    for editor in fallbacks {
+        if which(editor).is_ok() {
+            return Ok(editor.to_string());
+        }
+    }
+    bail!("Could not find a default editor. Please set the $EDITOR environment variable.")
+}
+
 fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
@@ -170,6 +222,7 @@ fn parse_note_from_file(path: &Path) -> Result<Note> {
                 .with_context(|| format!("Failed to parse YAML frontmatter in {:?}", path))?;
             return Ok(Note {
                 id,
+                path: path.to_path_buf(),
                 frontmatter,
                 content,
             });
@@ -177,6 +230,7 @@ fn parse_note_from_file(path: &Path) -> Result<Note> {
     }
     Ok(Note {
         id,
+        path: path.to_path_buf(),
         frontmatter: Frontmatter::default(),
         content: file_content,
     })
@@ -210,7 +264,6 @@ fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<PathBu
             matches.push(entry.path());
         }
     }
-
     if matches.is_empty() {
         bail!("No jot found with the prefix '{}'", prefix);
     } else if matches.len() > 1 {
@@ -233,7 +286,6 @@ fn get_ordinal_suffix(n: usize) -> &'static str {
         "th"
     } else {
         match n % 10 {
-            // What about 11, 12, and 13?
             1 => "st",
             2 => "nd",
             3 => "rd",
@@ -248,11 +300,9 @@ fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathB
     }
     let mut entries: Vec<_> = fs::read_dir(entries_dir)?.filter_map(Result::ok).collect();
     let total_jots = entries.len();
-
     if total_jots == 0 {
         bail!("No jots exist to act upon.");
     }
-
     if index > total_jots {
         bail!(
             "Index out of bounds. You asked for the {}{} last jot, but only {} exist.",
@@ -261,10 +311,7 @@ fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathB
             total_jots
         );
     }
-
-    // Sort by filename, which is chronological
     entries.sort_by_key(|e| e.file_name());
-
     let target_index = total_jots - index;
     entries
         .get(target_index)
@@ -272,7 +319,7 @@ fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathB
         .with_context(|| "Failed to get entry at calculated index. This is an unexpected error.")
 }
 
-// Main entrypoint
+// --- Main Entrypoint ---
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let entries_dir = get_entries_dir()?;
@@ -282,7 +329,7 @@ fn main() -> Result<()> {
             Commands::New { template } => command_new(&entries_dir, template)?,
             Commands::List => command_list(&entries_dir)?,
             Commands::Find { query } => command_find(&entries_dir, &query)?,
-            Commands::Tags { tags } => command_tags(&entries_dir, &tags)?,
+            Commands::Tags { tags } => command_tags_filter(&entries_dir, &tags)?,
             Commands::Today { compile } => {
                 command_by_date_filter(&entries_dir, Local::now().date_naive(), compile)?
             }
@@ -309,6 +356,7 @@ fn main() -> Result<()> {
                 command_delete(note_path, force)?;
             }
             Commands::Info(args) => command_info(&entries_dir, args)?,
+            Commands::Tag(args) => command_tag(&entries_dir, args)?,
         }
     } else if !cli.message.is_empty() {
         let message = cli.message.join(" ");
@@ -329,54 +377,26 @@ fn get_note_path_for_action(
     last: Option<usize>,
 ) -> Result<PathBuf> {
     if let Some(index) = last {
+        if id_prefix.is_some() {
+            bail!("Cannot use an ID prefix and the --last flag at the same time.");
+        }
         find_note_by_index_from_end(entries_dir, index)
     } else if let Some(prefix) = id_prefix {
         find_unique_note_by_prefix(entries_dir, &prefix)
     } else {
-        // This case should be prevented by clap's `required = true` on the group
         unreachable!();
     }
 }
 
-// Command logic
-
-fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
-    // ...
-    let mut matches = Vec::new();
-    if let Some((start_str, end_str)) = date_spec.split_once("..") {
-        let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
-        let end_date = NaiveDate::parse_from_str(end_str, "%Y-%m-%d")?;
-        println!("Finding jots from {} to {}...", start_date, end_date);
-        for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
-            let filename = entry.file_name().to_string_lossy().to_string();
-            if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
-                if date >= start_date && date <= end_date {
-                    matches.push(parse_note_from_file(&entry.path())?);
-                }
-            }
-        }
-    } else {
-        let date = NaiveDate::parse_from_str(date_spec, "%Y-%m-%d")?;
-        return command_by_date_filter(entries_dir, date, compile);
-    }
-    matches.sort_by(|a, b| a.id.cmp(&b.id));
-    if compile {
-        compile_notes(matches)?
-    } else {
-        display_note_list(matches)
-    }
-    Ok(())
-}
-
+// --- Command Logic ---
 fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
-    // ...
     let mut content = String::new();
     if let Some(tags) = tags {
         if !tags.is_empty() {
-            content.push_str("---\ntags:\n");
-            for tag in tags {
-                content.push_str(&format!("  - {}\n", tag));
-            }
+            let frontmatter = Frontmatter { tags };
+            let fm_str = serde_yaml::to_string(&frontmatter)?;
+            content.push_str("---\n");
+            content.push_str(&fm_str);
             content.push_str("---\n\n");
         }
     }
@@ -391,8 +411,7 @@ fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) ->
 }
 
 fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
-    // ...
-    let editor = env::var("EDITOR")?;
+    let editor = get_editor()?;
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
@@ -421,8 +440,66 @@ fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> 
     Ok(())
 }
 
+fn command_edit(note_path: PathBuf) -> Result<()> {
+    let editor = get_editor()?;
+    println!(
+        "Opening {:?} in {}...",
+        &note_path.file_name().unwrap(),
+        &editor
+    );
+    let status = Command::new(&editor).arg(&note_path).status()?;
+    if !status.success() {
+        bail!("Editor exited with a non-zero status.");
+    }
+    println!("Finished editing {:?}.", &note_path.file_name().unwrap());
+    Ok(())
+}
+
+fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
+    let (id_prefix, last) = match &args.action {
+        TagAction::Add {
+            id_prefix, last, ..
+        }
+        | TagAction::Remove {
+            id_prefix, last, ..
+        }
+        | TagAction::Set {
+            id_prefix, last, ..
+        } => (id_prefix.as_ref(), *last),
+    };
+
+    let note_path = get_note_path_for_action(entries_dir, id_prefix.cloned(), last)?;
+    let mut note = parse_note_from_file(&note_path)?;
+
+    match args.action {
+        TagAction::Add { tags, .. } => {
+            for tag in tags {
+                if !note.frontmatter.tags.contains(&tag) {
+                    note.frontmatter.tags.push(tag);
+                }
+            }
+            println!("Added tags to '{}'.", note.id);
+        }
+        TagAction::Remove { tags, .. } => {
+            note.frontmatter.tags.retain(|t| !tags.contains(t));
+            println!("Removed tags from '{}'.", note.id);
+        }
+        TagAction::Set { tags, .. } => {
+            note.frontmatter.tags = tags;
+            println!("Set tags for '{}'.", note.id);
+        }
+    }
+    note.frontmatter.tags.sort();
+    note.frontmatter.tags.dedup();
+
+    let new_frontmatter_str = serde_yaml::to_string(&note.frontmatter)?;
+    let new_content = format!("---\n{}---\n\n{}", new_frontmatter_str, note.content);
+    fs::write(&note.path, new_content)?;
+
+    Ok(())
+}
+
 fn command_list(entries_dir: &PathBuf) -> Result<()> {
-    // ...
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = Vec::new();
     for entry in entries.filter_map(Result::ok) {
@@ -435,7 +512,6 @@ fn command_list(entries_dir: &PathBuf) -> Result<()> {
 }
 
 fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
-    // ...
     println!("Searching for \"{}\" in your jots...", query);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -449,17 +525,14 @@ fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
     Ok(())
 }
 
-fn command_tags(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
-    // ...
+fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
     println!("Filtering by tags: {:?}", tags);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
     for entry in entries.filter_map(Result::ok) {
         let note = parse_note_from_file(&entry.path())?;
-        if let Some(note_tags) = &note.frontmatter.tags {
-            if tags.iter().all(|t| note_tags.contains(t)) {
-                matches.push(note);
-            }
+        if note.frontmatter.tags.iter().any(|t| tags.contains(t)) {
+            matches.push(note);
         }
     }
     display_note_list(matches);
@@ -467,7 +540,6 @@ fn command_tags(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
 }
 
 fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
-    // ...
     let date_prefix = date.format("%Y-%m-%d").to_string();
     println!("Finding jots from {}...", date_prefix);
     let mut matches = Vec::new();
@@ -490,7 +562,6 @@ fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool)
 }
 
 fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
-    // ...
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
     println!("Finding jots from this week (starting {})...", week_start);
@@ -512,19 +583,30 @@ fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     Ok(())
 }
 
-fn command_edit(note_path: PathBuf) -> Result<()> {
-    let editor =
-        env::var("EDITOR").with_context(|| "The '$EDITOR' environment variable is not set.")?;
-    println!(
-        "Opening {:?} in {}...",
-        &note_path.file_name().unwrap(),
-        &editor
-    );
-    let status = Command::new(&editor).arg(&note_path).status()?;
-    if !status.success() {
-        bail!("Editor exited with a non-zero status.");
+fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
+    let mut matches = Vec::new();
+    if let Some((start_str, end_str)) = date_spec.split_once("..") {
+        let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
+        let end_date = NaiveDate::parse_from_str(end_str, "%Y-%m-%d")?;
+        println!("Finding jots from {} to {}...", start_date, end_date);
+        for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+            let filename = entry.file_name().to_string_lossy().to_string();
+            if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
+                if date >= start_date && date <= end_date {
+                    matches.push(parse_note_from_file(&entry.path())?);
+                }
+            }
+        }
+    } else {
+        let date = NaiveDate::parse_from_str(date_spec, "%Y-%m-%d")?;
+        return command_by_date_filter(entries_dir, date, compile);
     }
-    println!("Finished editing {:?}.", &note_path.file_name().unwrap());
+    matches.sort_by(|a, b| a.id.cmp(&b.id));
+    if compile {
+        compile_notes(matches)?
+    } else {
+        display_note_list(matches)
+    }
     Ok(())
 }
 
@@ -552,9 +634,10 @@ fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
 }
 
 fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
-    // ...
     if !args.paths && !args.stats {
-        println!("Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`");
+        println!(
+            "Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`"
+        );
         println!("\nFor more information, try '--help'");
         return Ok(());
     }
@@ -572,10 +655,8 @@ fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
         for entry in entries.filter_map(Result::ok) {
             note_count += 1;
             let note = parse_note_from_file(&entry.path())?;
-            if let Some(tags) = note.frontmatter.tags {
-                for tag in tags {
-                    *tag_counts.entry(tag).or_insert(0) += 1;
-                }
+            for tag in note.frontmatter.tags {
+                *tag_counts.entry(tag).or_insert(0) += 1;
             }
         }
         println!("Total jots: {}", note_count);
@@ -590,25 +671,4 @@ fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*; // Import everything from the parent module (our main.rs)
-
-    #[test]
-    fn test_ordinal_suffix() {
-        assert_eq!(get_ordinal_suffix(1), "st");
-        assert_eq!(get_ordinal_suffix(2), "nd");
-        assert_eq!(get_ordinal_suffix(3), "rd");
-        assert_eq!(get_ordinal_suffix(4), "th");
-        assert_eq!(get_ordinal_suffix(10), "th");
-        assert_eq!(get_ordinal_suffix(11), "th");
-        assert_eq!(get_ordinal_suffix(12), "th");
-        assert_eq!(get_ordinal_suffix(13), "th");
-        assert_eq!(get_ordinal_suffix(21), "st");
-        assert_eq!(get_ordinal_suffix(22), "nd");
-        assert_eq!(get_ordinal_suffix(23), "rd");
-        assert_eq!(get_ordinal_suffix(101), "st");
-    }
 }
