@@ -99,9 +99,11 @@ The `--tags` (or `-t`) flag accepts space-separated or comma-separated values.
 
 ### Viewing and filtering notes
 
-**1. List the 10 most recent notes:**
+**1. List a specific number of recent notes:**
+The `list` command defaults to showing 10 notes, but you can provide a number to see more or less.
 ```sh
 ❯ rjot list
+❯ rjot list 5
 ```
 
 **2. Full-text search of all notes:**
@@ -192,7 +194,7 @@ Use the `tag` subcommand to modify tags on an existing note without opening an e
 
 ### Utility commands
 
-**1. Get info about your setup:**
+Get info about your setup:
 ```sh
 # Show storage paths
 ❯ rjot info --paths
@@ -246,14 +248,40 @@ The `rjot sync` command is designed to be secure and work automatically with com
 3.  **Default SSH Keys:** If the SSH agent fails, it will look for your default SSH key files (e.g., `~/.ssh/id_rsa`).
 4.  **Git Credential Helper:** As a final fallback, it will try to use Git's configured credential helper.
 
+#### Encryption (optional)
 
+For maximum privacy, you can enable transparent, on-disk encryption. This allows you to store your notes on any cloud service securely.
+
+**One-time setup:**
+
+1.  **Enable encryption:**
+    This command generates a secret key (`identity.txt`) and a public key (`config.toml`) inside your `rjot` directory.
+    
+    ```sh
+    ❯ rjot init --encrypt
+    ```
+    
+    **IMPORTANT:** You must back up the `identity.txt` file somewhere safe. If you lose it, your notes cannot be recovered. The `.gitignore` file created by `rjot init --git` will prevent this file from being committed.
+
+**How it works:**
+
+After running `init --encrypt`, every new or edited note will be automatically encrypted when saved and decrypted when read. The process is completely transparent. If you try to open a note file with a normal text editor, you will only see unreadable encrypted text.
+
+**Turning off encryption:**
+
+If you ever want to convert your journal back to plain text, you can use the `decrypt` command.
+
+```sh
+# This will permanently decrypt all notes and remove the key files
+❯ rjot decrypt
+```
 ## Configuration
 
 ### File storage location
 
 `rjot` respects platform conventions. By default, notes are stored in the `entries` sub-folder of:
 
-* **macOS:** `~/Library/Application Support/rjot/`
+* **macOS:** `~/Users/<YourUsername>/Library/Application Support/rjot/`
 * **Linux:** `~/.config/rjot/`
 * **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\rjot\`
 

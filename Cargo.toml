@@ -11,16 +11,21 @@ keywords = ["cli", "journal", "notes", "markdown", "log"]
 categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
+age = "0.10"
 anyhow = "1.0"  # For cleaner error handling
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 dirs = "5.0.1" 
 git2 = "0.18"
+rpassword = "7.3"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_yaml = "0.9.34"
 which = "4.4.2"
+toml = "0.8"
 
 [dev-dependencies]
 assert_cmd = "2.0"
+chrono = "0.4"
+git2 = "0.18"
 predicates = "3.1"
 tempfile = "3.10"

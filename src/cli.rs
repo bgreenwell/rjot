@@ -21,8 +21,11 @@ pub enum Commands {
         #[arg(long, short)]
         template: Option<String>,
     },
-    /// List the last 10 jots
-    List,
+    /// List the most recent jots
+    List {
+        /// The number of jots to list
+        count: Option<usize>,
+    },
     /// Find jots by searching their content
     Find {
         #[arg(required = true)]
@@ -83,15 +86,21 @@ pub enum Commands {
     Info(InfoArgs),
     /// Manage tags on an existing jot
     Tag(TagArgs),
-    // NEW: Git-related commands
-    /// Initialize the rjot directory, optionally as a Git repository
+    /// Initialize the rjot directory, optionally with Git and/or encryption
     Init {
-        /// Initialize the rjot directory as a Git repository
         #[arg(long)]
         git: bool,
+        #[arg(long)]
+        encrypt: bool,
     },
     /// Commit and push changes to a remote Git repository
     Sync,
+    /// Permanently decrypt all notes in the rjot directory
+    Decrypt {
+        /// Force decryption without a confirmation prompt
+        #[arg(long, short)]
+        force: bool,
+    },
 }
 
 #[derive(Args, Debug)]

@@ -1,7 +1,12 @@
-use anyhow::{bail, Context, Result};
+use age::{
+    x25519::{Identity, Recipient},
+    Encryptor,
+};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use which::which;
 
@@ -22,7 +27,13 @@ pub struct Note {
     pub content: String,
 }
 
-// --- Helper Functions ---
+// --- Configuration Structs ---
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct Config {
+    recipient: Option<String>,
+}
+
+// --- Path and Editor Helpers ---
 pub fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -75,11 +86,68 @@ pub fn get_editor() -> Result<String> {
     bail!("Could not find a default editor. Please set the $EDITOR environment variable.")
 }
 
+// --- Core File I/O Logic ---
+pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
+    let root_dir = get_rjot_dir_root()?;
+    let config_path = root_dir.join("config.toml");
+    let config: Config = if config_path.exists() {
+        toml::from_str(&fs::read_to_string(config_path)?)?
+    } else {
+        Config::default()
+    };
+
+    if let Some(recipient_str) = config.recipient {
+        let recipient: Recipient = recipient_str
+            .parse()
+            .map_err(|e| anyhow!("Failed to parse recipient from config: {}", e))?;
+        let encrypted_bytes = {
+            let encryptor = Encryptor::with_recipients(vec![Box::new(recipient)]);
+            let mut encrypted = vec![];
+            let mut writer = encryptor.expect("REASON").wrap_output(&mut encrypted)?;
+            writer.write_all(content.as_bytes())?;
+            writer.finish()?;
+            encrypted
+        };
+        fs::write(path, encrypted_bytes)?;
+    } else {
+        fs::write(path, content)?;
+    }
+    Ok(())
+}
+
+pub fn read_note_file(path: &Path) -> Result<String> {
+    let root_dir = get_rjot_dir_root()?;
+    let identity_path = root_dir.join("identity.txt");
+    let file_bytes = fs::read(path)?;
+
+    if identity_path.exists() && file_bytes.starts_with(b"age-encryption.org") {
+        let identity_str = fs::read_to_string(identity_path)?;
+        let identity: Identity = identity_str
+            .parse()
+            .map_err(|_| anyhow!("Failed to parse identity file."))?;
+        let decryptor = age::Decryptor::new(&file_bytes as &[u8])?;
+        let mut decrypted_bytes = vec![];
+        if let age::Decryptor::Recipients(reader) = decryptor {
+            let identities: Vec<Box<dyn age::Identity>> = vec![Box::new(identity)];
+            reader
+                .decrypt(identities.iter().map(|i| i.as_ref()))?
+                .read_to_end(&mut decrypted_bytes)?;
+        } else {
+            bail!("Expected recipients-based encryption");
+        }
+        Ok(String::from_utf8(decrypted_bytes)?)
+    } else {
+        Ok(String::from_utf8(file_bytes)?)
+    }
+}
+
+// --- Other Helpers ---
 pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
     let file_content =
-        fs::read_to_string(path).with_context(|| format!("Could not read file: {:?}", path))?;
+        read_note_file(path).with_context(|| format!("Could not read file: {:?}", path))?;
+
     if file_content.starts_with("---") {
         if let Some(end_frontmatter) = file_content.get(3..).and_then(|s| s.find("---")) {
             let frontmatter_str = &file_content[3..(3 + end_frontmatter)];
@@ -100,6 +168,23 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
         frontmatter: Frontmatter::default(),
         content: file_content,
     })
+}
+
+pub fn get_note_path_for_action(
+    entries_dir: &Path,
+    id_prefix: Option<String>,
+    last: Option<usize>,
+) -> Result<PathBuf> {
+    if let Some(index) = last {
+        if id_prefix.is_some() {
+            bail!("Cannot use an ID prefix and the --last flag at the same time.");
+        }
+        find_note_by_index_from_end(entries_dir, index)
+    } else if let Some(prefix) = id_prefix {
+        find_unique_note_by_prefix(entries_dir, &prefix)
+    } else {
+        unreachable!();
+    }
 }
 
 pub fn display_note_list(notes: Vec<Note>) {
@@ -182,22 +267,5 @@ pub fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<P
     entries
         .get(target_index)
         .map(|e| e.path())
-        .with_context(|| "Failed to get entry at calculated index. This is an unexpected error.")
-}
-
-pub fn get_note_path_for_action(
-    entries_dir: &Path,
-    id_prefix: Option<String>,
-    last: Option<usize>,
-) -> Result<PathBuf> {
-    if let Some(index) = last {
-        if id_prefix.is_some() {
-            bail!("Cannot use an ID prefix and the --last flag at the same time.");
-        }
-        find_note_by_index_from_end(entries_dir, index)
-    } else if let Some(prefix) = id_prefix {
-        find_unique_note_by_prefix(entries_dir, &prefix)
-    } else {
-        unreachable!();
-    }
+        .with_context(|| "Failed to get entry at calculated index.")
 }

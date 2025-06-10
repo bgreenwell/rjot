@@ -5,7 +5,8 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use age::{secrecy::ExposeSecret, x25519, Decryptor, Identity};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
 
@@ -15,28 +16,131 @@ use crate::helpers::{
     parse_note_from_file, Frontmatter,
 };
 
-// This file contains the logic for executing each command.
-
-pub fn command_init(git: bool) -> Result<()> {
+pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     println!("rjot directory is at: {:?}", root_dir);
 
     if git {
         match Repository::init(&root_dir) {
-            Ok(_) => println!("Initialized a new Git repository in {:?}", root_dir),
+            Ok(repo) => {
+                println!("Initialized a new Git repository in {:?}", root_dir);
+                let gitignore_path = root_dir.join(".gitignore");
+                if !repo.is_empty()? {
+                    println!("Git repository is not empty. Assuming it is already set up.");
+                } else if !gitignore_path.exists() {
+                    fs::write(&gitignore_path, "identity.txt\nconfig.toml\n")?;
+                    println!("Created .gitignore to exclude sensitive files.");
+
+                    let mut index = repo.index()?;
+                    index.add_path(Path::new(".gitignore"))?;
+                    index.write()?;
+                    let oid = index.write_tree()?;
+                    let tree = repo.find_tree(oid)?;
+                    let signature = Signature::now("rjot", "rjot@localhost")?;
+                    repo.commit(
+                        Some("HEAD"),
+                        &signature,
+                        &signature,
+                        "Initial commit: Add .gitignore",
+                        &tree,
+                        &[],
+                    )?;
+                    println!("Created initial commit to track .gitignore");
+                }
+            }
             Err(e) if e.code() == git2::ErrorCode::Exists => {
                 println!("Git repository already exists in {:?}", root_dir)
             }
             Err(e) => bail!("Failed to initialize Git repository: {}", e),
         }
     }
+
+    if encrypt {
+        let identity = x25519::Identity::generate();
+        let recipient = identity.to_public();
+        let identity_path = root_dir.join("identity.txt");
+
+        if identity_path.exists() {
+            println!("Encryption identity already exists. Doing nothing.");
+        } else {
+            fs::write(&identity_path, identity.to_string().expose_secret())?;
+            println!("Generated new encryption identity at: {:?}", identity_path);
+            println!("\nIMPORTANT: Back this file up somewhere safe!");
+
+            let config_path = root_dir.join("config.toml");
+            let config_str = format!("recipient = \"{}\"", recipient);
+            fs::write(config_path, config_str)?;
+            println!("Saved public key to config.toml.");
+            println!("\nYour public key (recipient) is: {}", recipient);
+        }
+    }
+    Ok(())
+}
+
+pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
+    let root_dir = get_rjot_dir_root()?;
+    let identity_path = root_dir.join("identity.txt");
+    if !identity_path.exists() {
+        println!("Journal is not encrypted (no identity.txt found). Nothing to do.");
+        return Ok(());
+    }
+
+    if !force {
+        print!("This will permanently decrypt all notes and remove your identity file. This action cannot be undone. Continue? [y/N] ");
+        io::stdout().flush()?;
+        let mut confirmation = String::new();
+        io::stdin().read_line(&mut confirmation)?;
+        if confirmation.trim().to_lowercase() != "y" {
+            println!("Decryption aborted.");
+            return Ok(());
+        }
+    }
+
+    println!("Loading decryption key...");
+    let identity_str = fs::read_to_string(&identity_path)?;
+    let identity = identity_str
+        .parse::<x25519::Identity>()
+        .map_err(|e| anyhow!(e))?;
+    let identities: Vec<Box<dyn Identity>> = vec![Box::new(identity)];
+
+    println!("Starting decryption of all notes...");
+    for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() {
+            let file_bytes = fs::read(&path)?;
+            if !file_bytes.starts_with(b"age-encryption.org") {
+                println!(
+                    "Skipping non-encrypted file: {:?}",
+                    path.file_name().unwrap()
+                );
+                continue;
+            }
+
+            let decryptor = Decryptor::new(&file_bytes as &[u8])?;
+            if let Decryptor::Recipients(reader) = decryptor {
+                let mut decrypted_bytes = vec![];
+                reader
+                    .decrypt(identities.iter().map(|i| i.as_ref()))?
+                    .read_to_end(&mut decrypted_bytes)?;
+                fs::write(&path, decrypted_bytes)?;
+                println!("Decrypted {:?}", path.file_name().unwrap());
+            }
+        }
+    }
+
+    let config_path = root_dir.join("config.toml");
+    fs::remove_file(&identity_path)?;
+    if config_path.exists() {
+        fs::remove_file(config_path)?;
+    }
+    println!("\nSuccessfully decrypted journal and removed encryption keys.");
     Ok(())
 }
 
 pub fn command_sync() -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let repo = Repository::open(&root_dir).map_err(|_| {
-        anyhow::anyhow!(
+        anyhow!(
             "rjot directory at {:?} is not a Git repository. Run `rjot init --git` first.",
             root_dir
         )
@@ -80,31 +184,25 @@ pub fn command_sync() -> Result<()> {
     let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
 
     let mut remote = repo.find_remote("origin").map_err(|_| {
-        anyhow::anyhow!(
-            "Could not find remote 'origin'. Please add a remote to your git repository."
-        )
+        anyhow!("Could not find remote 'origin'. Please add a remote to your git repository.")
     })?;
 
-    // --- Final, Robust Authentication Logic ---
     let mut callbacks = RemoteCallbacks::new();
     callbacks.credentials(|_url, username_from_git, allowed_types| {
         let username = username_from_git.unwrap_or("git");
 
-        // 1. Try GITHUB_TOKEN env var for HTTPS remotes.
         if allowed_types.is_user_pass_plaintext() {
             if let Ok(token) = env::var("GITHUB_TOKEN") {
                 return Cred::userpass_plaintext(username, &token);
             }
         }
 
-        // 2. Try SSH Agent (for ssh:// remotes)
         if allowed_types.is_ssh_key() {
             if let Ok(cred) = Cred::ssh_key_from_agent(username) {
                 return Ok(cred);
             }
         }
 
-        // 3. Try default SSH key locations as a fallback
         if allowed_types.is_ssh_key() {
             if let Some(home_dir) = dirs::home_dir() {
                 if let Ok(cred) =
@@ -115,7 +213,6 @@ pub fn command_sync() -> Result<()> {
             }
         }
 
-        // 4. Try Git's built-in credential helper as a final fallback
         if allowed_types.is_user_pass_plaintext() {
             if let Ok(cred) = Cred::credential_helper(&repo.config()?, _url, Some(username)) {
                 return Ok(cred);
@@ -141,7 +238,6 @@ pub fn command_sync() -> Result<()> {
 }
 
 pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
-    // ... same as before
     let mut content = String::new();
     if let Some(tags) = tags {
         if !tags.is_empty() {
@@ -157,13 +253,12 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
-    fs::write(&file_path, content)?;
+    helpers::write_note_file(&file_path, &content)?;
     println!("Successfully saved to {:?}", file_path);
     Ok(())
 }
 
 pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
-    // ... same as before
     let editor = helpers::get_editor()?;
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
@@ -176,15 +271,13 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
         let now_str = now.to_rfc3339();
         initial_content = fs::read_to_string(tpl_path)?.replace("{{date}}", &now_str);
     }
-    fs::write(&file_path, initial_content)?;
+    helpers::write_note_file(&file_path, &initial_content)?;
     let status = Command::new(&editor).arg(&file_path).status()?;
     if !status.success() {
         bail!("Editor exited with a non-zero status.");
     }
-    let mut file = fs::File::open(&file_path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    if contents.trim().is_empty() {
+    let final_content = helpers::read_note_file(&file_path)?;
+    if final_content.trim().is_empty() {
         fs::remove_file(&file_path)?;
         println!("Empty jot discarded.");
     } else {
@@ -194,7 +287,6 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
 }
 
 pub fn command_edit(note_path: PathBuf) -> Result<()> {
-    // ... same as before
     let editor = helpers::get_editor()?;
     println!(
         "Opening {:?} in {}...",
@@ -210,7 +302,6 @@ pub fn command_edit(note_path: PathBuf) -> Result<()> {
 }
 
 pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
-    // ... same as before
     let (id_prefix, last) = match &args.action {
         TagAction::Add {
             id_prefix, last, ..
@@ -222,10 +313,8 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
             id_prefix, last, ..
         } => (id_prefix.as_ref(), *last),
     };
-
     let note_path = get_note_path_for_action(entries_dir, id_prefix.cloned(), last)?;
     let mut note = parse_note_from_file(&note_path)?;
-
     match args.action {
         TagAction::Add { tags, .. } => {
             for tag in tags {
@@ -246,29 +335,26 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     }
     note.frontmatter.tags.sort();
     note.frontmatter.tags.dedup();
-
     let new_frontmatter_str = serde_yaml::to_string(&note.frontmatter)?;
     let new_content = format!("---\n{}---\n\n{}", new_frontmatter_str, note.content);
-    fs::write(&note.path, new_content)?;
-
+    helpers::write_note_file(&note.path, &new_content)?;
     Ok(())
 }
 
-pub fn command_list(entries_dir: &PathBuf) -> Result<()> {
-    // ... same as before
+pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
+    let num_to_list = count.unwrap_or(10);
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = Vec::new();
     for entry in entries.filter_map(Result::ok) {
         notes.push(parse_note_from_file(&entry.path())?);
     }
     notes.sort_by(|a, b| b.id.cmp(&a.id));
-    notes.truncate(10);
+    notes.truncate(num_to_list);
     display_note_list(notes);
     Ok(())
 }
 
 pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
-    // ... same as before
     println!("Searching for \"{}\" in your jots...", query);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -283,7 +369,6 @@ pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
 }
 
 pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
-    // ... same as before
     println!("Filtering by tags: {:?}", tags);
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -298,7 +383,6 @@ pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()>
 }
 
 pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
-    // ... same as before
     let date_prefix = date.format("%Y-%m-%d").to_string();
     println!("Finding jots from {}...", date_prefix);
     let mut matches = Vec::new();
@@ -330,7 +414,6 @@ pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 }
 
 pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
-    // ... same as before
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
     println!("Finding jots from this week (starting {})...", week_start);
@@ -353,7 +436,6 @@ pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 }
 
 pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
-    // ... same as before
     let mut matches = Vec::new();
     if let Some((start_str, end_str)) = date_spec.split_once("..") {
         let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
@@ -381,14 +463,12 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
 }
 
 pub fn command_show(note_path: PathBuf) -> Result<()> {
-    // ... same as before
-    let content = fs::read_to_string(&note_path)?;
+    let content = helpers::read_note_file(&note_path)?;
     println!("{}", content);
     Ok(())
 }
 
 pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
-    // ... same as before
     let filename = note_path.file_name().unwrap().to_string_lossy();
     if !force {
         print!("Are you sure you want to delete '{}'? [y/N] ", filename);
@@ -406,9 +486,10 @@ pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
 }
 
 pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
-    // ... same as before
     if !args.paths && !args.stats {
-        println!("Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`");
+        println!(
+            "Please provide a flag to the info command, e.g., `rjot info --paths` or `rjot info --stats`"
+        );
         println!("\nFor more information, try '--help'");
         return Ok(());
     }

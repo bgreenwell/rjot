@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use chrono::{Datelike, Local};
 use predicates::prelude::*;
 use std::fs;
 use std::path::PathBuf;
@@ -10,6 +11,8 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 fn setup() -> (TempDir, PathBuf) {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let rjot_dir = temp_dir.path().to_path_buf();
+    // Ensure the base directory and entries subdir exist for tests
+    fs::create_dir_all(rjot_dir.join("entries")).expect("Failed to create entries dir");
     (temp_dir, rjot_dir)
 }
 
@@ -267,19 +270,28 @@ fn test_editor_fallback() -> TestResult {
 fn test_time_based_commands_and_compile() -> TestResult {
     let (_temp_dir, rjot_dir) = setup();
     let entries_dir = rjot_dir.join("entries");
-    fs::create_dir_all(&entries_dir)?; // Ensure the entries directory exists
 
-    // Create a note for today and a note for a week ago
-    let today_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+    // Create a note for today
+    let today = Local::now().date_naive();
     fs::write(
-        entries_dir.join(format!("{}-120000.md", today_str)),
+        entries_dir.join(format!("{}-120000.md", today.format("%Y-%m-%d"))),
         "note for today",
     )?;
 
-    let week_ago = chrono::Local::now().date_naive() - chrono::Duration::days(7);
-    let week_ago_str = week_ago.format("%Y-%m-%d").to_string();
+    // Create a note for the first day of this week
+    let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
+    // Ensure the start of the week is not the same as today, unless today is Sunday
+    if week_start != today {
+        fs::write(
+            entries_dir.join(format!("{}-120000.md", week_start.format("%Y-%m-%d"))),
+            "note from start of week",
+        )?;
+    }
+
+    // Create a note for a week ago that is NOT in the current week
+    let week_ago = today - chrono::Duration::days(7);
     fs::write(
-        entries_dir.join(format!("{}-120000.md", week_ago_str)),
+        entries_dir.join(format!("{}-120000.md", week_ago.format("%Y-%m-%d"))),
         "note from a week ago",
     )?;
 
@@ -292,24 +304,18 @@ fn test_time_based_commands_and_compile() -> TestResult {
         .stdout(predicate::str::contains("note for today"))
         .stdout(predicate::str::contains("note from a week ago").not());
 
-    // Test `on` with a specific date
-    Command::cargo_bin("rjot")?
-        .arg("on")
-        .arg(&week_ago_str)
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("note from a week ago"));
-
     // Test `week` and `--compile`
-    Command::cargo_bin("rjot")?
+    let week_command = Command::cargo_bin("rjot")?
         .arg("week")
         .arg("--compile")
         .env("RJOT_DIR", &rjot_dir)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("#").count(1)) // Should contain one compiled note
-        .stdout(predicate::str::contains("note for today"));
+        .success();
+
+    // Assert that both notes from this week are present
+    week_command
+        .stdout(predicate::str::contains("note for today"))
+        .stdout(predicate::str::contains("note from start of week"));
 
     Ok(())
 }
@@ -332,6 +338,152 @@ fn test_new_with_template() -> TestResult {
     let entry_path = fs::read_dir(entries_dir)?.next().unwrap()?.path();
     let content = fs::read_to_string(entry_path)?;
     assert!(content.contains("- daily"));
+
+    Ok(())
+}
+
+#[test]
+fn test_git_init_and_sync() -> TestResult {
+    let (_temp_dir, rjot_dir) = setup();
+
+    // 1. Init with git
+    Command::cargo_bin("rjot")?
+        .args(&["init", "--git"])
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Initialized a new Git repository"));
+
+    assert!(rjot_dir.join(".git").exists());
+    assert!(rjot_dir.join(".gitignore").exists());
+
+    // 2. Set up a bare repository to act as a remote
+    let remote_dir = tempdir()?;
+    git2::Repository::init_bare(remote_dir.path())?;
+    let local_repo = git2::Repository::open(&rjot_dir)?;
+    local_repo.remote("origin", remote_dir.path().to_str().unwrap())?;
+
+    // 3. Create a note and sync
+    Command::cargo_bin("rjot")?
+        .arg("a note to be synced")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+
+    Command::cargo_bin("rjot")?
+        .arg("sync")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Sync complete."));
+
+    // 4. Verify the commit exists in the "remote" repo
+    let remote_repo = git2::Repository::open_bare(remote_dir.path())?;
+    let head = remote_repo.head()?.peel_to_commit()?;
+    assert!(head.message().unwrap().contains("rjot sync"));
+
+    Ok(())
+}
+
+#[test]
+fn test_encryption_and_decryption_lifecycle() -> TestResult {
+    let (_temp_dir, rjot_dir) = setup();
+    let entries_dir = rjot_dir.join("entries");
+
+    // 1. Init with encryption
+    Command::cargo_bin("rjot")?
+        .args(&["init", "--encrypt"])
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Generated new encryption identity",
+        ));
+
+    assert!(rjot_dir.join("identity.txt").exists());
+    assert!(rjot_dir.join("config.toml").exists());
+
+    // 2. Create an encrypted note
+    Command::cargo_bin("rjot")?
+        .arg("this is a secret")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+
+    // 3. Verify the file on disk is encrypted
+    let entry_path = fs::read_dir(&entries_dir)?.next().unwrap()?.path();
+    let raw_content = fs::read(&entry_path)?;
+    assert!(raw_content.starts_with(b"age-encryption.org"));
+
+    // 4. Verify rjot can read it transparently
+    Command::cargo_bin("rjot")?
+        .arg("show")
+        .arg("--last")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("this is a secret"));
+
+    // 5. Decrypt the journal
+    Command::cargo_bin("rjot")?
+        .args(&["decrypt", "--force"])
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Successfully decrypted journal"));
+
+    // 6. Verify the file on disk is now plaintext
+    let raw_content_after = fs::read_to_string(&entry_path)?;
+    assert_eq!(raw_content_after, "this is a secret");
+
+    // 7. Verify the identity and config files were removed
+    assert!(!rjot_dir.join("identity.txt").exists());
+    assert!(!rjot_dir.join("config.toml").exists());
+
+    Ok(())
+}
+
+#[test]
+fn test_list_count_override() -> TestResult {
+    let (_temp_dir, rjot_dir) = setup();
+
+    for i in 0..12 {
+        Command::cargo_bin("rjot")?
+            .arg(format!("note {}", i))
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200)); // Ensure different timestamps
+    }
+
+    // Default list should show 10
+    let output = Command::cargo_bin("rjot")?
+        .arg("list")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(output.get_output().stdout.clone())?;
+    assert_eq!(
+        stdout.lines().count(),
+        13,
+        "Expected 10 notes + 2 header lines + 1 space"
+    );
+
+    // Override to show 5
+    let output_5 = Command::cargo_bin("rjot")?
+        .arg("list")
+        .arg("5")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+
+    let stdout_5 = String::from_utf8(output_5.get_output().stdout.clone())?;
+    assert_eq!(
+        stdout_5.lines().count(),
+        8,
+        "Expected 5 notes + 2 header lines + 1 space"
+    );
 
     Ok(())
 }

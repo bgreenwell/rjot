@@ -14,11 +14,10 @@ fn main() -> Result<()> {
     let cli = cli::Cli::parse();
     let entries_dir = helpers::get_entries_dir()?;
 
-    // The main match statement now includes the new `init` and `sync` commands.
     match cli.command {
         Some(command) => match command {
             Commands::New { template } => commands::command_new(&entries_dir, template)?,
-            Commands::List => commands::command_list(&entries_dir)?,
+            Commands::List { count } => commands::command_list(&entries_dir, count)?,
             Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
             Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
             Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
@@ -45,9 +44,9 @@ fn main() -> Result<()> {
             }
             Commands::Info(args) => commands::command_info(&entries_dir, args)?,
             Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
-            // New commands are handled here
-            Commands::Init { git } => commands::command_init(git)?,
+            Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
             Commands::Sync => commands::command_sync()?,
+            Commands::Decrypt { force } => commands::command_decrypt(&entries_dir, force)?,
         },
         None => {
             if !cli.message.is_empty() {
@@ -63,4 +62,26 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+// Add the missing unit test back into main.rs
+#[cfg(test)]
+mod tests {
+    use crate::helpers::get_ordinal_suffix;
+
+    #[test]
+    fn test_ordinal_suffix() {
+        assert_eq!(get_ordinal_suffix(1), "st");
+        assert_eq!(get_ordinal_suffix(2), "nd");
+        assert_eq!(get_ordinal_suffix(3), "rd");
+        assert_eq!(get_ordinal_suffix(4), "th");
+        assert_eq!(get_ordinal_suffix(10), "th");
+        assert_eq!(get_ordinal_suffix(11), "th");
+        assert_eq!(get_ordinal_suffix(12), "th");
+        assert_eq!(get_ordinal_suffix(13), "th");
+        assert_eq!(get_ordinal_suffix(21), "st");
+        assert_eq!(get_ordinal_suffix(22), "nd");
+        assert_eq!(get_ordinal_suffix(23), "rd");
+        assert_eq!(get_ordinal_suffix(101), "st");
+    }
 }

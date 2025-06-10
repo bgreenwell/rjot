@@ -11,6 +11,12 @@ This release focuses on quality-of-life improvements, robust error handling, and
 
 ### Added
 
+* The `--encrypt` flag for the `init` command, which generates a new cryptographic key and enables transparent, on-disk encryption for all notes.
+
+* A new `decrypt` subcommand to permanently decrypt all notes in the journal and remove the encryption keys.
+
+* A new optional `<COUNT>` argument to the `list` subcommand to allow users to specify how many recent notes to display (e.g., `rjot list 20`).
+
 * A new `init` subcommand to initialize the `rjot` directory.
 
 *  The `--git` flag for the `init` command, which turns the `rjot` data directory into a local Git repository.
