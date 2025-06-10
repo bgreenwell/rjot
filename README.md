@@ -335,8 +335,8 @@ Here’s how to set it up for your specific operating system:
 
 `rjot` is under active development. The next major step is to implement the "power features":
 
-* [ ] **Git integration**: `rjot init --git` to turn your journal into a version-controlled repository, and `rjot sync` to automate commits and sync with a remote.
-* [ ] **Encryption**: `rjot init --encrypt` to enable transparent, on-disk file encryption using `age` for ultimate privacy.
+* [x] **Git integration**: `rjot init --git` to turn your journal into a version-controlled repository, and `rjot sync` to automate commits and sync with a remote.
+* [x] **Encryption**: `rjot init --encrypt` to enable transparent, on-disk file encryption using `age` for ultimate privacy.
 * [ ] **Reminders**: `rjot remind` to set system-level notifications (e.g., `rjot remind me in 1 hour to...`).
 
 ## Contributing
