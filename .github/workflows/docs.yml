@@ -35,6 +35,11 @@ jobs:
             toolchain: stable
       - name: Build documentation
         run: cargo doc --no-deps
+
+      # NEW STEP: Create the redirect page
+      - name: Create redirect page
+        run: echo '<meta http-equiv="refresh" content="0; url=rjot">' > target/doc/index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
@@ -54,4 +59,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
