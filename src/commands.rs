@@ -1,3 +1,9 @@
+//! This module contains the logic for executing each subcommand.
+//!
+//! Each public function corresponds to a command defined in the `cli` module.
+//! It uses functions from the `helpers` module to interact with the file system
+//! and perform other utility tasks.
+
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -16,6 +22,7 @@ use crate::helpers::{
     parse_note_from_file, Frontmatter,
 };
 
+/// Initializes the `rjot` directory, optionally with Git and/or encryption.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     println!("rjot directory is at: {:?}", root_dir);
@@ -77,6 +84,7 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     Ok(())
 }
 
+/// Permanently decrypts all notes in the journal.
 pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let identity_path = root_dir.join("identity.txt");
@@ -137,6 +145,7 @@ pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
     Ok(())
 }
 
+/// Commits and pushes all changes in the rjot Git repository to the `origin` remote.
 pub fn command_sync() -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let repo = Repository::open(&root_dir).map_err(|_| {
@@ -237,6 +246,7 @@ pub fn command_sync() -> Result<()> {
     Ok(())
 }
 
+/// Creates a new jot instantly from command-line arguments.
 pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
     let mut content = String::new();
     if let Some(tags) = tags {
@@ -258,6 +268,7 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
     Ok(())
 }
 
+/// Creates a new jot by opening the default editor.
 pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
     let editor = helpers::get_editor()?;
     let now = Local::now();
@@ -286,6 +297,7 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
     Ok(())
 }
 
+/// Opens an existing jot in the default editor.
 pub fn command_edit(note_path: PathBuf) -> Result<()> {
     let editor = helpers::get_editor()?;
     println!(
@@ -301,6 +313,7 @@ pub fn command_edit(note_path: PathBuf) -> Result<()> {
     Ok(())
 }
 
+/// Manages tags on an existing jot.
 pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     let (id_prefix, last) = match &args.action {
         TagAction::Add {
@@ -341,6 +354,7 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     Ok(())
 }
 
+/// Lists the most recent jots.
 pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
     let num_to_list = count.unwrap_or(10);
     let entries = fs::read_dir(entries_dir)?;
@@ -354,6 +368,7 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
     Ok(())
 }
 
+/// Performs a full-text search of all jots.
 pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
     println!("Searching for \"{}\" in your jots...", query);
     let entries = fs::read_dir(entries_dir)?;
@@ -368,6 +383,7 @@ pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
     Ok(())
 }
 
+/// Filters jots by one or more tags.
 pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
     println!("Filtering by tags: {:?}", tags);
     let entries = fs::read_dir(entries_dir)?;
@@ -382,6 +398,7 @@ pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()>
     Ok(())
 }
 
+/// A helper function for all date-based filtering.
 pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
     let date_prefix = date.format("%Y-%m-%d").to_string();
     println!("Finding jots from {}...", date_prefix);
@@ -404,15 +421,18 @@ pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: b
     Ok(())
 }
 
+/// Lists jots created today.
 pub fn command_today(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     command_by_date_filter(entries_dir, Local::now().date_naive(), compile)
 }
 
+/// Lists jots created yesterday.
 pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     let yesterday = Local::now().date_naive() - chrono::Duration::days(1);
     command_by_date_filter(entries_dir, yesterday, compile)
 }
 
+/// Lists jots created in the current week.
 pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
@@ -435,6 +455,7 @@ pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     Ok(())
 }
 
+/// Lists jots from a specific date or date range.
 pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
     let mut matches = Vec::new();
     if let Some((start_str, end_str)) = date_spec.split_once("..") {
@@ -462,12 +483,14 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
     Ok(())
 }
 
+/// Displays the full content of a specific jot.
 pub fn command_show(note_path: PathBuf) -> Result<()> {
     let content = helpers::read_note_file(&note_path)?;
     println!("{}", content);
     Ok(())
 }
 
+/// Deletes a specific jot with user confirmation.
 pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
     let filename = note_path.file_name().unwrap().to_string_lossy();
     if !force {
@@ -485,6 +508,7 @@ pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
     Ok(())
 }
 
+/// Displays information and statistics about the journal.
 pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     if !args.paths && !args.stats {
         println!(

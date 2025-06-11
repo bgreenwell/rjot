@@ -1,24 +1,32 @@
+//! This module contains helper functions and data structures used across the application.
+//!
+//! It handles tasks like file system interactions, configuration management, note parsing,
+//! and encryption/decryption logic, centralizing common functionality.
+
+use std::env;
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
 use age::{
     x25519::{Identity, Recipient},
     Encryptor,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::env;
-use std::fs;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
 use which::which;
 
-// This file contains all the data structures and helper/utility functions.
-
 // --- Data Structures ---
+
+/// Represents the YAML frontmatter section of a note.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Frontmatter {
+    /// A list of tags associated with the note.
     #[serde(default)]
     pub tags: Vec<String>,
 }
 
+/// Represents a fully parsed jot note, including its metadata and content.
 #[derive(Debug, Default)]
 pub struct Note {
     pub id: String,
@@ -27,13 +35,19 @@ pub struct Note {
     pub content: String,
 }
 
-// --- Configuration Structs ---
+/// Represents the `config.toml` file used for encryption settings.
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Config {
+    /// The public key (`age` recipient) used for encrypting notes.
     recipient: Option<String>,
 }
 
 // --- Path and Editor Helpers ---
+
+/// Gets the root directory for all `rjot` data, creating it if it doesn't exist.
+///
+/// Honors the `$RJOT_DIR` environment variable if set, otherwise uses the platform-specific
+/// user config directory.
 pub fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -47,6 +61,7 @@ pub fn get_rjot_dir_root() -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Gets the directory where note entries are stored, ensuring it exists.
 pub fn get_entries_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
     let entries_dir = root_dir.join("entries");
@@ -56,6 +71,7 @@ pub fn get_entries_dir() -> Result<PathBuf> {
     Ok(entries_dir)
 }
 
+/// Gets the directory where note templates are stored, ensuring it exists.
 pub fn get_templates_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
     let templates_dir = root_dir.join("templates");
@@ -65,6 +81,13 @@ pub fn get_templates_dir() -> Result<PathBuf> {
     Ok(templates_dir)
 }
 
+/// Determines which command-line editor to use.
+///
+/// It prioritizes the `$EDITOR` environment variable, then falls back to a list
+/// of common editors (`vim`, `nvim`, `nano`, `notepad.exe`).
+///
+/// # Errors
+/// Returns an error if no suitable editor can be found.
 pub fn get_editor() -> Result<String> {
     if let Ok(editor) = env::var("EDITOR") {
         if !editor.is_empty() {
@@ -87,6 +110,8 @@ pub fn get_editor() -> Result<String> {
 }
 
 // --- Core File I/O Logic ---
+
+/// Writes content to a note file, encrypting it if encryption is enabled.
 pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let config_path = root_dir.join("config.toml");
@@ -115,6 +140,7 @@ pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
+/// Reads content from a note file, decrypting it if necessary.
 pub fn read_note_file(path: &Path) -> Result<String> {
     let root_dir = get_rjot_dir_root()?;
     let identity_path = root_dir.join("identity.txt");
@@ -142,6 +168,8 @@ pub fn read_note_file(path: &Path) -> Result<String> {
 }
 
 // --- Other Helpers ---
+
+/// Parses a file into a `Note` struct, separating frontmatter from content.
 pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
@@ -170,6 +198,7 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     })
 }
 
+/// Determines which note to act on based on user input (ID prefix or `--last` flag).
 pub fn get_note_path_for_action(
     entries_dir: &Path,
     id_prefix: Option<String>,
@@ -183,10 +212,12 @@ pub fn get_note_path_for_action(
     } else if let Some(prefix) = id_prefix {
         find_unique_note_by_prefix(entries_dir, &prefix)
     } else {
+        // This case should be prevented by clap's `required = true` on the group
         unreachable!();
     }
 }
 
+/// Formats and prints a list of notes to the console.
 pub fn display_note_list(notes: Vec<Note>) {
     if notes.is_empty() {
         println!("\nNo jots found.");
@@ -200,6 +231,7 @@ pub fn display_note_list(notes: Vec<Note>) {
     }
 }
 
+/// Formats and prints a compiled summary of notes to the console.
 pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
     for note in notes {
         println!("---\n\n# {}\n\n{}", note.id, note.content);
@@ -207,6 +239,7 @@ pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
     Ok(())
 }
 
+/// Finds a single, unique note file based on a starting prefix of its ID.
 pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<PathBuf> {
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -232,6 +265,15 @@ pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<Pa
     }
 }
 
+/// Gets the appropriate ordinal suffix for a number (e.g., "st", "nd", "rd", "th").
+///
+/// # Examples
+///
+/// ```
+/// # use rjot::helpers::get_ordinal_suffix;
+/// assert_eq!(get_ordinal_suffix(1), "st");
+/// assert_eq!(get_ordinal_suffix(22), "nd");
+/// ```
 pub fn get_ordinal_suffix(n: usize) -> &'static str {
     if (11..=13).contains(&(n % 100)) {
         "th"
@@ -245,6 +287,7 @@ pub fn get_ordinal_suffix(n: usize) -> &'static str {
     }
 }
 
+/// Finds the Nth most recent note.
 pub fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathBuf> {
     if index == 0 {
         bail!("--last index must be 1 or greater.");

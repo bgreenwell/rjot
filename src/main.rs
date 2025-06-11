@@ -1,4 +1,9 @@
-// Declare the modules
+//! `rjot` is a minimalist, command-line journal that's fast, private, and git-friendly.
+//!
+//! This crate provides the main entrypoint and command-line parsing logic. It orchestrates
+//! the different modules to execute user commands.
+
+// Declare the modules that make up the application.
 mod cli;
 mod commands;
 mod helpers;
@@ -8,12 +13,15 @@ use clap::Parser;
 
 use cli::Commands;
 
+/// The main entrypoint for the rjot application.
+///
+/// This function parses command-line arguments, gets the necessary directory paths,
+/// and dispatches to the appropriate command handler based on user input.
 fn main() -> Result<()> {
-    // The main function's responsibility is now just to parse arguments
-    // and dispatch to the correct command handler.
     let cli = cli::Cli::parse();
     let entries_dir = helpers::get_entries_dir()?;
 
+    // Match on the subcommand provided by the user.
     match cli.command {
         Some(command) => match command {
             Commands::New { template } => commands::command_new(&entries_dir, template)?,
@@ -48,11 +56,13 @@ fn main() -> Result<()> {
             Commands::Sync => commands::command_sync()?,
             Commands::Decrypt { force } => commands::command_decrypt(&entries_dir, force)?,
         },
+        // If no subcommand is given, this is the default action.
         None => {
             if !cli.message.is_empty() {
                 let message = cli.message.join(" ");
                 commands::command_down(&entries_dir, &message, cli.tags)?;
             } else {
+                // If no subcommand and no message, show a brief help message.
                 println!(
                     "No message provided. Use 'rjot <MESSAGE>' or a subcommand like 'rjot list'."
                 );
@@ -64,7 +74,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// Add the missing unit test back into main.rs
+// Unit tests for helpers that are simple and don't require file system access.
 #[cfg(test)]
 mod tests {
     use crate::helpers::get_ordinal_suffix;
