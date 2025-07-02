@@ -24,17 +24,33 @@ use {
     std::{borrow::Cow, sync::Arc},
 };
 
-use crate::cli::{InfoArgs, TagAction, TagArgs};
+use crate::cli::{InfoArgs, TagAction, TagArgs, NotebookCommand};
 use crate::helpers::{
     self, display_note_list, get_note_path_for_action, get_rjot_dir_root, get_templates_dir,
-    parse_note_from_file, Frontmatter,
+    get_notebooks_root_dir, parse_note_from_file, Frontmatter, DEFAULT_NOTEBOOK_NAME,
+    ACTIVE_NOTEBOOK_ENV_VAR,
+    // NOTEBOOKS_DIR_NAME is not directly used in commands.rs, only in helpers.rs
 };
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
+/// This will also set up the basic notebook structure.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
-    let root_dir = get_rjot_dir_root()?;
-    println!("rjot directory is at: {root_dir:?}");
+    let root_dir = get_rjot_dir_root()?; // This creates the root RJOT_DIR if not present
+    println!("rjot root directory is at: {:?}", root_dir);
 
+    // Ensure the default notebook directory structure exists.
+    let default_notebook_dir = helpers::get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)?;
+    println!(
+        "Default notebook directory initialized at: {:?}",
+        default_notebook_dir
+    );
+
+    // Ensure the templates directory exists.
+    let templates_dir = get_templates_dir()?;
+    println!("Templates directory ensured at: {:?}", templates_dir);
+
+    // Initialize .gitignore within the rjot root directory.
+    // This is important because config.toml and identity.txt are at the root.
     if git {
         match Repository::init(&root_dir) {
             Ok(repo) => {
@@ -87,6 +103,78 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
             fs::write(config_path, config_str)?;
             println!("Saved public key to config.toml.");
             println!("\nYour public key (recipient) is: {recipient}");
+        }
+    }
+    Ok(())
+}
+
+/// Handles notebook management subcommands.
+pub fn command_notebook(notebook_cmd: NotebookCommand) -> Result<()> {
+    match notebook_cmd {
+        NotebookCommand::New { name } => {
+            if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+                bail!("Invalid notebook name: '{}'. Name cannot contain slashes or be '.' or '..'.", name);
+            }
+            if name.to_lowercase() == DEFAULT_NOTEBOOK_NAME && name != DEFAULT_NOTEBOOK_NAME {
+                println!(
+                    "Warning: Creating notebook with a name that differs from '{}' only by case.",
+                    DEFAULT_NOTEBOOK_NAME
+                );
+            }
+            let notebook_path = helpers::get_specific_notebook_dir(&name)?;
+            println!(
+                "Successfully created notebook '{}' at {:?}.",
+                name, notebook_path
+            );
+        }
+        NotebookCommand::List => {
+            let notebooks_root = helpers::get_notebooks_root_dir()?;
+            println!("Available notebooks:");
+            let entries = fs::read_dir(notebooks_root)?;
+            let mut count = 0;
+            for entry in entries.filter_map(Result::ok) {
+                if entry.path().is_dir() {
+                    if let Some(notebook_name) = entry.file_name().to_str() {
+                        println!("  - {}", notebook_name);
+                        count += 1;
+                    }
+                }
+            }
+            if count == 0 {
+                println!("  (No notebooks found. The 'default' notebook will be used.)");
+            }
+        }
+        NotebookCommand::Use { name } => {
+            let notebooks_root = helpers::get_notebooks_root_dir()?;
+            let notebook_path = notebooks_root.join(&name);
+            if !notebook_path.is_dir() {
+                bail!(
+                    "Notebook '{}' not found. Create it first with `rjot notebook new {}`.",
+                    name,
+                    name
+                );
+            }
+            println!("To activate the notebook '{}', run the following command in your shell:", name);
+            println!("# For bash/zsh:");
+            println!("  export {}=\"{}\"", ACTIVE_NOTEBOOK_ENV_VAR, name);
+            println!("# For fish:");
+            println!("  set -x {}=\"{}\"", ACTIVE_NOTEBOOK_ENV_VAR, name);
+            println!("# For PowerShell:");
+            println!("  $env:{} = \"{}\"", ACTIVE_NOTEBOOK_ENV_VAR, name);
+            println!("# For Windows CMD:");
+            println!("  set {}={}", ACTIVE_NOTEBOOK_ENV_VAR, name);
+            println!("\nRun `rjot info --paths` to verify the change after setting the variable.");
+        }
+        NotebookCommand::Path { name } => {
+            let notebook_path = if let Some(n) = name {
+                if n.contains('/') || n.contains('\\') || n == "." || n == ".." {
+                    bail!("Invalid notebook name: '{}'. Name cannot contain slashes or be '.' or '..'.", n);
+                }
+                helpers::get_specific_notebook_dir(&n)?
+            } else {
+                helpers::get_entries_dir()?
+            };
+            println!("{}", notebook_path.display());
         }
     }
     Ok(())
@@ -271,6 +359,7 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
+    // println!("[Debug command_down] Attempting to write to: entries_dir={:?}, file_path={:?}", entries_dir, file_path);
     helpers::write_note_file(&file_path, &content)?;
     println!("Successfully saved to {file_path:?}");
     Ok(())
@@ -603,9 +692,20 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     }
     if args.paths {
         println!("--- rjot paths ---");
-        println!("Root Directory:  {:?}", helpers::get_rjot_dir_root()?);
-        println!("Entries:         {entries_dir:?}");
-        println!("Templates:       {:?}", helpers::get_templates_dir()?);
+        println!("Root Directory:      {:?}", helpers::get_rjot_dir_root()?);
+        // entries_dir passed to command_info is already resolved to the active/specified notebook
+        println!("Active Notebook Dir: {:?}", entries_dir);
+        println!("All Notebooks Root:  {:?}", helpers::get_notebooks_root_dir()?);
+        println!("Templates:           {:?}", helpers::get_templates_dir()?);
+
+        // Show RJOT_ACTIVE_NOTEBOOK env var status
+        match std::env::var(ACTIVE_NOTEBOOK_ENV_VAR) {
+            Ok(val) => println!("Env Var ({}): {}", ACTIVE_NOTEBOOK_ENV_VAR, val),
+            Err(_) => println!(
+                "Env Var ({}): Not set (using default notebook or --notebook flag)",
+                ACTIVE_NOTEBOOK_ENV_VAR
+            ),
+        }
     }
     if args.stats {
         println!("\n--- rjot stats ---");

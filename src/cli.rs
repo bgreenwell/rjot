@@ -24,11 +24,43 @@ pub struct Cli {
     /// The message for a new jot. This captures all positional arguments
     /// that are not part of a subcommand.
     pub message: Vec<String>,
+
+    /// Operate on a specific notebook for this command only.
+    #[arg(long, global = true)]
+    pub notebook_opt: Option<String>,
+}
+
+/// Defines subcommands for managing notebooks.
+#[derive(Subcommand, Debug)]
+pub enum NotebookCommand {
+    /// Create a new notebook.
+    New {
+        /// The name of the notebook to create.
+        #[arg(required = true)]
+        name: String,
+    },
+    /// List all available notebooks.
+    List,
+    /// Set the active notebook (prints export command).
+    Use {
+        /// The name of the notebook to use.
+        #[arg(required = true)]
+        name: String,
+    },
+    /// Show the path of a notebook.
+    /// If no name is provided, shows the path of the current active notebook.
+    Path {
+        /// The name of the notebook.
+        name: Option<String>,
+    },
 }
 
 /// An enumeration of all possible subcommands `rjot` can execute.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Manage notebooks.
+    #[command(subcommand, alias = "nb")]
+    Notebook(NotebookCommand), // This should refer to the public NotebookCommand
     /// Create a new jot using an editor, optionally with a template.
     New {
         /// The name of the template to use from the templates directory.

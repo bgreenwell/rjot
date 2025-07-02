@@ -16,6 +16,10 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use which::which;
 
+pub const NOTEBOOKS_DIR_NAME: &str = "notebooks";
+pub const DEFAULT_NOTEBOOK_NAME: &str = "default";
+pub const ACTIVE_NOTEBOOK_ENV_VAR: &str = "RJOT_ACTIVE_NOTEBOOK";
+
 // --- Data Structures ---
 
 /// Represents the YAML frontmatter section of a note.
@@ -61,14 +65,52 @@ pub fn get_rjot_dir_root() -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Gets the directory where note entries are stored, ensuring it exists.
-pub fn get_entries_dir() -> Result<PathBuf> {
-    let root_dir = get_rjot_dir_root()?;
-    let entries_dir = root_dir.join("entries");
-    if !entries_dir.exists() {
-        fs::create_dir_all(&entries_dir)?;
+/// Gets the root directory for all notebooks, creating it if it doesn't exist.
+pub fn get_notebooks_root_dir() -> Result<PathBuf> {
+    let rjot_root = get_rjot_dir_root()?;
+    let notebooks_root = rjot_root.join(NOTEBOOKS_DIR_NAME);
+    if !notebooks_root.exists() {
+        fs::create_dir_all(&notebooks_root)
+            .with_context(|| format!("Failed to create notebooks directory at {:?}", notebooks_root))?;
     }
-    Ok(entries_dir)
+    Ok(notebooks_root)
+}
+
+/// Gets the directory for a specific notebook name, creating it if it doesn't exist.
+pub fn get_specific_notebook_dir(notebook_name: &str) -> Result<PathBuf> {
+    let notebooks_root = get_notebooks_root_dir()?;
+    let notebook_path = notebooks_root.join(notebook_name);
+    if !notebook_path.exists() {
+        // println!("[Debug get_specific_notebook_dir] Path {:?} DOES NOT exist. Creating.", notebook_path);
+        fs::create_dir_all(&notebook_path)
+            .with_context(|| format!("Failed to create notebook directory at {:?}", notebook_path))?;
+    } else {
+        // println!("[Debug get_specific_notebook_dir] Path {:?} ALREADY exists.", notebook_path);
+    }
+    Ok(notebook_path)
+}
+
+/// Gets the directory where note entries are stored, considering the active notebook.
+pub fn get_entries_dir() -> Result<PathBuf> {
+    match env::var(ACTIVE_NOTEBOOK_ENV_VAR) {
+        Ok(notebook_name) if !notebook_name.is_empty() => {
+            let notebooks_root = get_notebooks_root_dir()?;
+            let specific_notebook_path = notebooks_root.join(&notebook_name);
+
+            if specific_notebook_path.exists() && specific_notebook_path.is_dir() {
+                Ok(specific_notebook_path)
+            } else {
+                eprintln!(
+                    "Warning: Notebook \"{}\" specified by {} does not exist. Falling back to default notebook.",
+                    notebook_name, ACTIVE_NOTEBOOK_ENV_VAR
+                );
+                get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)
+            }
+        }
+        _ => {
+            get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)
+        }
+    }
 }
 
 /// Gets the directory where note templates are stored, ensuring it exists.
@@ -81,13 +123,8 @@ pub fn get_templates_dir() -> Result<PathBuf> {
     Ok(templates_dir)
 }
 
+
 /// Determines which command-line editor to use.
-///
-/// It prioritizes the `$EDITOR` environment variable, then falls back to a list
-/// of common editors (`vim`, `nvim`, `nano`, `notepad.exe`).
-///
-/// # Errors
-/// Returns an error if no suitable editor can be found.
 pub fn get_editor() -> Result<String> {
     if let Ok(editor) = env::var("EDITOR") {
         if !editor.is_empty() {
@@ -121,6 +158,7 @@ pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
         Config::default()
     };
 
+    // Parent directory should be guaranteed to exist by get_specific_notebook_dir or get_entries_dir
     if let Some(recipient_str) = config.recipient {
         let recipient: Recipient = recipient_str
             .parse()
@@ -212,7 +250,6 @@ pub fn get_note_path_for_action(
     } else if let Some(prefix) = id_prefix {
         find_unique_note_by_prefix(entries_dir, &prefix)
     } else {
-        // This case should be prevented by clap's `required = true` on the group
         unreachable!();
     }
 }
@@ -266,14 +303,6 @@ pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<Pa
 }
 
 /// Gets the appropriate ordinal suffix for a number (e.g., "st", "nd", "rd", "th").
-///
-/// # Examples
-///
-/// ```
-/// # use rjot::helpers::get_ordinal_suffix;
-/// assert_eq!(get_ordinal_suffix(1), "st");
-/// assert_eq!(get_ordinal_suffix(22), "nd");
-/// ```
 pub fn get_ordinal_suffix(n: usize) -> &'static str {
     if (11..=13).contains(&(n % 100)) {
         "th"

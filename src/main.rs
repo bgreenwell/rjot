@@ -12,6 +12,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use cli::Commands;
+// use helpers::DEFAULT_NOTEBOOK_NAME; // No longer needed here
 
 /// The main entrypoint for the rjot application.
 ///
@@ -19,52 +20,77 @@ use cli::Commands;
 /// and dispatches to the appropriate command handler based on user input.
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
-    let entries_dir = helpers::get_entries_dir()?;
+
+    // Determine the entries_dir for commands that need it.
+    // Some commands (Init, Sync, Notebook) handle paths differently or don't need this entries_dir.
+    let entries_dir_res = if let Some(notebook_name) = &cli.notebook_opt {
+        helpers::get_specific_notebook_dir(notebook_name)
+    } else {
+        helpers::get_entries_dir() // This handles RJOT_ACTIVE_NOTEBOOK or default
+    };
 
     // Match on the subcommand provided by the user.
+    // For commands that don't use the standard `entries_dir` (like Init, Sync, Notebook),
+    // they are matched first. Other commands will use the resolved `entries_dir`.
     match cli.command {
-        Some(command) => match command {
-            Commands::New { template } => commands::command_new(&entries_dir, template)?,
-            Commands::List { count } => commands::command_list(&entries_dir, count)?,
-            Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
-            Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
-            #[cfg(not(windows))]
-            Commands::Select => commands::command_select(&entries_dir)?,
-            Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
-            Commands::Yesterday { compile } => commands::command_yesterday(&entries_dir, compile)?,
-            Commands::Week { compile } => commands::command_by_week(&entries_dir, compile)?,
-            Commands::On { date_spec, compile } => {
-                commands::command_on(&entries_dir, &date_spec, compile)?
+        Some(Commands::Init { git, encrypt }) => {
+            commands::command_init(git, encrypt)?
+        }
+        Some(Commands::Sync) => {
+            commands::command_sync()?
+        }
+        Some(Commands::Notebook(notebook_cmd)) => {
+            // The command_notebook function handles its own path logic internally if needed
+            // (e.g., for listing all notebooks, creating new ones)
+            // It doesn't rely on a pre-calculated `entries_dir` in the same way other commands do.
+            commands::command_notebook(notebook_cmd)?
+        }
+        Some(other_command) => {
+            // All other commands require entries_dir to be successfully resolved.
+            let entries_dir = entries_dir_res?;
+            match other_command {
+                Commands::New { template } => commands::command_new(&entries_dir, template)?,
+                Commands::List { count } => commands::command_list(&entries_dir, count)?,
+                Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
+                Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
+                #[cfg(not(windows))]
+                Commands::Select => commands::command_select(&entries_dir)?,
+                Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
+                Commands::Yesterday { compile } => commands::command_yesterday(&entries_dir, compile)?,
+                Commands::Week { compile } => commands::command_by_week(&entries_dir, compile)?,
+                Commands::On { date_spec, compile } => {
+                    commands::command_on(&entries_dir, &date_spec, compile)?
+                }
+                Commands::Edit { id_prefix, last } => {
+                    let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+                    commands::command_edit(note_path)?;
+                }
+                Commands::Show { id_prefix, last } => {
+                    let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+                    commands::command_show(note_path)?;
+                }
+                Commands::Delete {
+                    id_prefix,
+                    last,
+                    force,
+                } => {
+                    let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+                    commands::command_delete(note_path, force)?;
+                }
+                Commands::Info(args) => commands::command_info(&entries_dir, args)?,
+                Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
+                Commands::Decrypt { force } => commands::command_decrypt(&entries_dir, force)?,
+                // Init, Sync, Notebook already handled. This makes the match exhaustive.
+                Commands::Init { .. } | Commands::Sync | Commands::Notebook(_) => unreachable!("Already handled"),
             }
-            Commands::Edit { id_prefix, last } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_edit(note_path)?;
-            }
-            Commands::Show { id_prefix, last } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_show(note_path)?;
-            }
-            Commands::Delete {
-                id_prefix,
-                last,
-                force,
-            } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_delete(note_path, force)?;
-            }
-            Commands::Info(args) => commands::command_info(&entries_dir, args)?,
-            Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
-            Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
-            Commands::Sync => commands::command_sync()?,
-            Commands::Decrypt { force } => commands::command_decrypt(&entries_dir, force)?,
-        },
-        // If no subcommand is given, this is the default action.
+        }
+        // If no subcommand is given, this is the default action (jot down a message).
         None => {
+            let entries_dir = entries_dir_res?; // Use the already resolved entries_dir
             if !cli.message.is_empty() {
                 let message = cli.message.join(" ");
                 commands::command_down(&entries_dir, &message, cli.tags)?;
             } else {
-                // If no subcommand and no message, show a brief help message.
                 println!(
                     "No message provided. Use 'rjot <MESSAGE>' or a subcommand like 'rjot list'."
                 );
