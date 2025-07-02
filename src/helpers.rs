@@ -181,7 +181,7 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
             let frontmatter_str = &file_content[3..(3 + end_frontmatter)];
             let content = file_content[(3 + end_frontmatter + 3)..].trim().to_string();
             let frontmatter: Frontmatter = serde_yaml::from_str(frontmatter_str)
-                .with_context(|| format!("Failed to parse YAML frontmatter in {:?}", path))?;
+                .with_context(|| format!("Failed to parse YAML frontmatter in {path:?}"))?;
             return Ok(Note {
                 id,
                 path: path.to_path_buf(),
