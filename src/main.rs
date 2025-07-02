@@ -28,6 +28,7 @@ fn main() -> Result<()> {
             Commands::List { count } => commands::command_list(&entries_dir, count)?,
             Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
             Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
+            #[cfg(not(windows))]
             Commands::Select => commands::command_select(&entries_dir)?,
             Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
             Commands::Yesterday { compile } => commands::command_yesterday(&entries_dir, compile)?,

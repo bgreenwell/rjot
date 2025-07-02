@@ -17,6 +17,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use crossbeam_channel::unbounded;
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
+#[cfg(not(windows))]
 use skim::prelude::*;
 
 use crate::cli::{InfoArgs, TagAction, TagArgs};
@@ -371,27 +372,37 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
     Ok(())
 }
 
+// --- Struct and Trait Implementation for Fuzzy Finding ---
+
+/// A custom struct to hold note information for fuzzy finding.
+///
+/// This struct allows us to define different text for displaying in the fuzzy
+/// finder versus what gets output when an item is selected.
+#[derive(Debug)]
+struct NoteItem {
+    id: String,
+    display_text: String,
+}
+
+impl SkimItem for NoteItem {
+    /// The text that will be displayed to the user in the fuzzy finder list.
+    fn text(&self) -> Cow<str> {
+        Cow::Borrowed(&self.display_text)
+    }
+
+    /// The text that will be returned when an item is selected.
+    /// In our case, we only want the note's ID.
+    fn output(&self) -> Cow<str> {
+        Cow::Borrowed(&self.id)
+    }
+}
+
 /// Interactively selects a jot using a fuzzy finder.
 ///
 /// This command provides a fast and intuitive way for users to find a specific
 /// note without needing to remember its exact ID or title. It displays an
 /// interactive list in the terminal that can be filtered in real-time.
-///
-/// # Arguments
-/// * `entries_dir` - The path to the directory containing all jot entries.
-///
-/// # Behavior
-/// 1. It reads all notes from the `entries_dir`.
-/// 2. It formats each note into a string like `"ID | FIRST LINE"`.
-/// 3. It pipes this list into the `skim` fuzzy finder.
-/// 4. If the user selects a note and presses Enter, this function captures the
-///    selection, extracts the note's ID, and prints it to `stdout`.
-/// 5. If the user aborts (e.g., by pressing Esc), the command exits gracefully
-///    without printing anything.
-///
-/// # Returns
-/// * `Ok(())` on successful selection or if the user aborts the selection.
-/// * `Err` if there's an issue reading the notes directory or parsing a note.
+#[cfg(not(windows))]
 pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = vec![];
@@ -401,7 +412,7 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     notes.sort_by(|a, b| b.id.cmp(&a.id));
 
     let options = SkimOptionsBuilder::default()
-        .height(Some("50%"))
+        // The .height() option is removed to enable the alternate screen
         .multi(false)
         .reverse(true)
         .build()?;
@@ -410,25 +421,36 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     type SkimChannel = (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>);
 
     let (tx, rx): SkimChannel = unbounded();
+    //let (tx, rx): (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>) = unbounded();
 
+    // Create and send custom NoteItem objects instead of plain strings
     for note in notes {
         let display_text = format!(
             "{} | {}",
             note.id,
             note.content.lines().next().unwrap_or("").trim()
         );
-        let _ = tx.send(Arc::new(display_text));
+        let item = NoteItem {
+            id: note.id,
+            display_text,
+        };
+        // The `tx` channel now sends our custom item
+        let _ = tx.send(Arc::new(item));
     }
     drop(tx);
 
-    let skim_output = Skim::run_with(&options, Some(rx))
-        .map(|out| out.selected_items)
-        .unwrap_or_default();
+    // Skim::run_with will now use our custom `output()` method.
+    // The library itself handles printing the output of the selected item.
+    // We no longer need to process the results ourselves and print the ID.
+    let skim_output = Skim::run_with(&options, Some(rx));
 
-    if let Some(item) = skim_output.first() {
-        // More robustly parse the ID by splitting on the known separator " | ".
-        if let Some((id, _)) = item.text().split_once(" | ") {
-            print!("{}", id);
+    // If the user hits Esc, skim_output will be None.
+    // If they select an item, skim handles printing the output from our
+    // custom `NoteItem::output` method.
+    if let Some(output) = skim_output {
+        if output.is_abort {
+            // User aborted (e.g., pressed Esc), so we do nothing.
+            return Ok(());
         }
     }
 

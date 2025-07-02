@@ -48,6 +48,7 @@ pub enum Commands {
     },
     /// Interactively select a note using a fuzzy finder.
     #[command(alias = "s")]
+    #[cfg(not(windows))] // Fuzzy finder is not supported on Windows
     Select,
     /// List jots that have specific tags.
     Tags {

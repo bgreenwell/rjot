@@ -11,6 +11,8 @@ This release focuses on quality-of-life improvements, robust error handling, and
 
 ### Added
 
+* A new `select` subcommand (alias `s`) that launches an interactive fuzzy finder, allowing users to quickly search and select a note.
+
 * The `--encrypt` flag for the `init` command, which generates a new cryptographic key and enables transparent, on-disk encryption for all notes.
 
 * A new `decrypt` subcommand to permanently decrypt all notes in the journal and remove the encryption keys.
