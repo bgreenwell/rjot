@@ -15,11 +15,13 @@ age = "0.10"
 anyhow = "1.0"  # For cleaner error handling
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
+crossbeam-channel = "0.5"
 dirs = "5.0.1" 
 git2 = "0.18"
 rpassword = "7.3"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_yaml = "0.9.34"
+skim = "0.10.4"
 which = "4.4.2"
 toml = "0.8"
 

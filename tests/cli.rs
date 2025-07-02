@@ -348,7 +348,7 @@ fn test_git_init_and_sync() -> TestResult {
 
     // 1. Init with git
     Command::cargo_bin("rjot")?
-        .args(&["init", "--git"])
+        .args(["init", "--git"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
@@ -392,7 +392,7 @@ fn test_encryption_and_decryption_lifecycle() -> TestResult {
 
     // 1. Init with encryption
     Command::cargo_bin("rjot")?
-        .args(&["init", "--encrypt"])
+        .args(["init", "--encrypt"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
@@ -426,7 +426,7 @@ fn test_encryption_and_decryption_lifecycle() -> TestResult {
 
     // 5. Decrypt the journal
     Command::cargo_bin("rjot")?
-        .args(&["decrypt", "--force"])
+        .args(["decrypt", "--force"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()

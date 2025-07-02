@@ -46,6 +46,9 @@ pub enum Commands {
         #[arg(required = true)]
         query: String,
     },
+    /// Interactively select a note using a fuzzy finder.
+    #[command(alias = "s")]
+    Select,
     /// List jots that have specific tags.
     Tags {
         /// Tags to filter by (can be comma-separated or space-separated).
