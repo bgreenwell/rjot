@@ -475,7 +475,12 @@ fn test_show_edit_delete_in_default_notebook() -> TestResult {
         fs::write(&script_path, "@echo edited content > %1")?;
     }
 
-    rjot_cmd().arg("edit").arg(first_note_id).env("EDITOR", &script_path).assert().success();
+    rjot_cmd()
+        .arg("edit")
+        .arg(first_note_id)
+        .env("EDITOR", &script_path)
+        .assert()
+        .success(); // Ensuring this line is clean
 
     let first_note_content = fs::read_to_string(&entries[0])?;
     assert!(first_note_content.contains("edited content"));
