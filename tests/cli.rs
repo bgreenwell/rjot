@@ -449,7 +449,7 @@ fn test_list_count_override() -> TestResult {
 
     for i in 0..12 {
         Command::cargo_bin("rjot")?
-            .arg(format!("note {}", i))
+            .arg(format!("note {i}"))
             .env("RJOT_DIR", &rjot_dir)
             .assert()
             .success();

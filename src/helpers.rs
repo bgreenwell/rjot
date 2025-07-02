@@ -174,7 +174,7 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
     let file_content =
-        read_note_file(path).with_context(|| format!("Could not read file: {:?}", path))?;
+        read_note_file(path).with_context(|| format!("Could not read file: {path:?}"))?;
 
     if file_content.starts_with("---") {
         if let Some(end_frontmatter) = file_content.get(3..).and_then(|s| s.find("---")) {

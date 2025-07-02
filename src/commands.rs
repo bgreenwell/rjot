@@ -29,12 +29,12 @@ use crate::helpers::{
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
-    println!("rjot directory is at: {:?}", root_dir);
+    println!("rjot directory is at: {root_dir:?}");
 
     if git {
         match Repository::init(&root_dir) {
             Ok(repo) => {
-                println!("Initialized a new Git repository in {:?}", root_dir);
+                println!("Initialized a new Git repository in {root_dir:?}");
                 let gitignore_path = root_dir.join(".gitignore");
                 if !repo.is_empty()? {
                     println!("Git repository is not empty. Assuming it is already set up.");
@@ -60,7 +60,7 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
                 }
             }
             Err(e) if e.code() == git2::ErrorCode::Exists => {
-                println!("Git repository already exists in {:?}", root_dir)
+                println!("Git repository already exists in {root_dir:?}")
             }
             Err(e) => bail!("Failed to initialize Git repository: {}", e),
         }
@@ -75,14 +75,14 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
             println!("Encryption identity already exists. Doing nothing.");
         } else {
             fs::write(&identity_path, identity.to_string().expose_secret())?;
-            println!("Generated new encryption identity at: {:?}", identity_path);
+            println!("Generated new encryption identity at: {identity_path:?}");
             println!("\nIMPORTANT: Back this file up somewhere safe!");
 
             let config_path = root_dir.join("config.toml");
-            let config_str = format!("recipient = \"{}\"", recipient);
+            let config_str = format!("recipient = \"{recipient}\"");
             fs::write(config_path, config_str)?;
             println!("Saved public key to config.toml.");
-            println!("\nYour public key (recipient) is: {}", recipient);
+            println!("\nYour public key (recipient) is: {recipient}");
         }
     }
     Ok(())
@@ -188,13 +188,13 @@ pub fn command_sync() -> Result<()> {
         &parents_ref,
     )?;
 
-    println!("Committed changes with message: '{}'", commit_message);
+    println!("Committed changes with message: '{commit_message}'");
 
     let head = repo.head()?;
     let branch_name = head.shorthand().with_context(|| {
         "Could not get branch name from HEAD. Are you in a detached HEAD state?"
     })?;
-    let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
+    let refspec = format!("refs/heads/{branch_name}:refs/heads/{branch_name}");
 
     let mut remote = repo.find_remote("origin").map_err(|_| {
         anyhow!("Could not find remote 'origin'. Please add a remote to your git repository.")
@@ -242,7 +242,7 @@ pub fn command_sync() -> Result<()> {
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
 
-    println!("Pushing to remote 'origin' on branch '{}'...", branch_name);
+    println!("Pushing to remote 'origin' on branch '{branch_name}'...");
     remote.push(&[&refspec], Some(&mut push_options))?;
 
     println!("Sync complete.");
@@ -263,12 +263,12 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
         }
     }
     content.push_str(message);
-    println!("Jotting down: \"{}\"", message);
+    println!("Jotting down: \"{message}\"");
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
     helpers::write_note_file(&file_path, &content)?;
-    println!("Successfully saved to {:?}", file_path);
+    println!("Successfully saved to {file_path:?}");
     Ok(())
 }
 
@@ -296,7 +296,7 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
         fs::remove_file(&file_path)?;
         println!("Empty jot discarded.");
     } else {
-        println!("Successfully saved to {:?}", file_path);
+        println!("Successfully saved to {file_path:?}");
     }
     Ok(())
 }
@@ -459,7 +459,7 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
 
 /// Performs a full-text search of all jots.
 pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
-    println!("Searching for \"{}\" in your jots...", query);
+    println!("Searching for \"{query}\" in your jots...");
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
     for entry in entries.filter_map(Result::ok) {
@@ -474,7 +474,7 @@ pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
 
 /// Filters jots by one or more tags.
 pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
-    println!("Filtering by tags: {:?}", tags);
+    println!("Filtering by tags: {tags:?}");
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
     for entry in entries.filter_map(Result::ok) {
@@ -490,7 +490,7 @@ pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()>
 /// A helper function for all date-based filtering.
 pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
     let date_prefix = date.format("%Y-%m-%d").to_string();
-    println!("Finding jots from {}...", date_prefix);
+    println!("Finding jots from {date_prefix}...");
     let mut matches = Vec::new();
     for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
         if entry
@@ -525,7 +525,7 @@ pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
-    println!("Finding jots from this week (starting {})...", week_start);
+    println!("Finding jots from this week (starting {week_start})...");
     let mut matches = Vec::new();
     for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
         let filename = entry.file_name().to_string_lossy().to_string();
@@ -550,7 +550,7 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
     if let Some((start_str, end_str)) = date_spec.split_once("..") {
         let start_date = NaiveDate::parse_from_str(start_str, "%Y-%m-%d")?;
         let end_date = NaiveDate::parse_from_str(end_str, "%Y-%m-%d")?;
-        println!("Finding jots from {} to {}...", start_date, end_date);
+        println!("Finding jots from {start_date} to {end_date}...");
         for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
             let filename = entry.file_name().to_string_lossy().to_string();
             if let Ok(date) = NaiveDate::parse_from_str(&filename[0..10], "%Y-%m-%d") {
@@ -575,7 +575,7 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
 /// Displays the full content of a specific jot.
 pub fn command_show(note_path: PathBuf) -> Result<()> {
     let content = helpers::read_note_file(&note_path)?;
-    println!("{}", content);
+    println!("{content}");
     Ok(())
 }
 
@@ -583,7 +583,7 @@ pub fn command_show(note_path: PathBuf) -> Result<()> {
 pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
     let filename = note_path.file_name().unwrap().to_string_lossy();
     if !force {
-        print!("Are you sure you want to delete '{}'? [y/N] ", filename);
+        print!("Are you sure you want to delete '{filename}'? [y/N] ");
         io::stdout().flush()?;
         let mut confirmation = String::new();
         io::stdin().read_line(&mut confirmation)?;
@@ -593,7 +593,7 @@ pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
         }
     }
     fs::remove_file(&note_path)?;
-    println!("Successfully deleted '{}'.", filename);
+    println!("Successfully deleted '{filename}'.");
     Ok(())
 }
 
@@ -609,7 +609,7 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     if args.paths {
         println!("--- rjot paths ---");
         println!("Root Directory:  {:?}", helpers::get_rjot_dir_root()?);
-        println!("Entries:         {:?}", entries_dir);
+        println!("Entries:         {entries_dir:?}");
         println!("Templates:       {:?}", helpers::get_templates_dir()?);
     }
     if args.stats {
@@ -624,14 +624,14 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
                 *tag_counts.entry(tag).or_insert(0) += 1;
             }
         }
-        println!("Total jots: {}", note_count);
+        println!("Total jots: {note_count}");
         if !tag_counts.is_empty() {
             let mut sorted_tags: Vec<_> = tag_counts.into_iter().collect();
             sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
             sorted_tags.truncate(5);
             println!("\nMost common tags:");
             for (tag, count) in sorted_tags {
-                println!("  - {} ({})", tag, count);
+                println!("  - {tag} ({count})");
             }
         }
     }
