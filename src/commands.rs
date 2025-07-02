@@ -24,12 +24,19 @@ use {
     std::{borrow::Cow, sync::Arc},
 };
 
-use crate::cli::{InfoArgs, TagAction, TagArgs, NotebookCommand};
+use crate::cli::{InfoArgs, NotebookCommand, TagAction, TagArgs};
 use crate::helpers::{
-    self, display_note_list, get_note_path_for_action, get_rjot_dir_root, get_templates_dir,
-    get_notebooks_root_dir, parse_note_from_file, Frontmatter, DEFAULT_NOTEBOOK_NAME,
+    self,
+    display_note_list,
+    get_note_path_for_action,
+    get_notebooks_root_dir,
+    get_rjot_dir_root,
+    get_templates_dir,
+    parse_note_from_file,
+    Frontmatter,
     ACTIVE_NOTEBOOK_ENV_VAR,
     // NOTEBOOKS_DIR_NAME is not directly used in commands.rs, only in helpers.rs
+    DEFAULT_NOTEBOOK_NAME,
 };
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
@@ -113,7 +120,10 @@ pub fn command_notebook(notebook_cmd: NotebookCommand) -> Result<()> {
     match notebook_cmd {
         NotebookCommand::New { name } => {
             if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
-                bail!("Invalid notebook name: '{}'. Name cannot contain slashes or be '.' or '..'.", name);
+                bail!(
+                    "Invalid notebook name: '{}'. Name cannot contain slashes or be '.' or '..'.",
+                    name
+                );
             }
             if name.to_lowercase() == DEFAULT_NOTEBOOK_NAME && name != DEFAULT_NOTEBOOK_NAME {
                 println!(
@@ -154,7 +164,10 @@ pub fn command_notebook(notebook_cmd: NotebookCommand) -> Result<()> {
                     name
                 );
             }
-            println!("To activate the notebook '{}', run the following command in your shell:", name);
+            println!(
+                "To activate the notebook '{}', run the following command in your shell:",
+                name
+            );
             println!("# For bash/zsh:");
             println!("  export {}=\"{}\"", ACTIVE_NOTEBOOK_ENV_VAR, name);
             println!("# For fish:");
@@ -695,7 +708,10 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
         println!("Root Directory:      {:?}", helpers::get_rjot_dir_root()?);
         // entries_dir passed to command_info is already resolved to the active/specified notebook
         println!("Active Notebook Dir: {:?}", entries_dir);
-        println!("All Notebooks Root:  {:?}", helpers::get_notebooks_root_dir()?);
+        println!(
+            "All Notebooks Root:  {:?}",
+            helpers::get_notebooks_root_dir()?
+        );
         println!("Templates:           {:?}", helpers::get_templates_dir()?);
 
         // Show RJOT_ACTIVE_NOTEBOOK env var status

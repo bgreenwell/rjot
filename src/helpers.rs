@@ -60,7 +60,8 @@ pub fn get_rjot_dir_root() -> Result<PathBuf> {
             .join("rjot"),
     };
     if !path.exists() {
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(&path)
+            .with_context(|| format!("Failed to create rjot root directory at {:?}", path))?;
     }
     Ok(path)
 }
@@ -70,8 +71,12 @@ pub fn get_notebooks_root_dir() -> Result<PathBuf> {
     let rjot_root = get_rjot_dir_root()?;
     let notebooks_root = rjot_root.join(NOTEBOOKS_DIR_NAME);
     if !notebooks_root.exists() {
-        fs::create_dir_all(&notebooks_root)
-            .with_context(|| format!("Failed to create notebooks directory at {:?}", notebooks_root))?;
+        fs::create_dir_all(&notebooks_root).with_context(|| {
+            format!(
+                "Failed to create notebooks directory at {:?}",
+                notebooks_root
+            )
+        })?;
     }
     Ok(notebooks_root)
 }
@@ -81,11 +86,9 @@ pub fn get_specific_notebook_dir(notebook_name: &str) -> Result<PathBuf> {
     let notebooks_root = get_notebooks_root_dir()?;
     let notebook_path = notebooks_root.join(notebook_name);
     if !notebook_path.exists() {
-        // println!("[Debug get_specific_notebook_dir] Path {:?} DOES NOT exist. Creating.", notebook_path);
-        fs::create_dir_all(&notebook_path)
-            .with_context(|| format!("Failed to create notebook directory at {:?}", notebook_path))?;
-    } else {
-        // println!("[Debug get_specific_notebook_dir] Path {:?} ALREADY exists.", notebook_path);
+        fs::create_dir_all(&notebook_path).with_context(|| {
+            format!("Failed to create notebook directory at {:?}", notebook_path)
+        })?;
     }
     Ok(notebook_path)
 }
@@ -107,9 +110,7 @@ pub fn get_entries_dir() -> Result<PathBuf> {
                 get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)
             }
         }
-        _ => {
-            get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)
-        }
+        _ => get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME),
     }
 }
 
@@ -118,11 +119,15 @@ pub fn get_templates_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
     let templates_dir = root_dir.join("templates");
     if !templates_dir.exists() {
-        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&templates_dir).with_context(|| {
+            format!(
+                "Failed to create templates directory at {:?}",
+                templates_dir
+            )
+        })?;
     }
     Ok(templates_dir)
 }
-
 
 /// Determines which command-line editor to use.
 pub fn get_editor() -> Result<String> {
