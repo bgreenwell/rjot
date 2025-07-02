@@ -24,16 +24,31 @@ use {
     std::{borrow::Cow, sync::Arc},
 };
 
-use crate::cli::{InfoArgs, TagAction, TagArgs};
+use crate::cli::{InfoArgs, NotebookCommand, TagAction, TagArgs};
 use crate::helpers::{
-    self, display_note_list, get_note_path_for_action, get_rjot_dir_root, get_templates_dir,
-    parse_note_from_file, Frontmatter,
+    self,
+    display_note_list,
+    get_note_path_for_action,
+    get_notebooks_root_dir, // This is used by command_info and command_notebook
+    get_rjot_dir_root,
+    get_templates_dir,
+    parse_note_from_file,
+    Frontmatter,
+    ACTIVE_NOTEBOOK_ENV_VAR,
+    DEFAULT_NOTEBOOK_NAME,
 };
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
+/// This will also set up the basic notebook structure.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
-    println!("rjot directory is at: {root_dir:?}");
+    println!("rjot root directory is at: {root_dir:?}");
+
+    let default_notebook_dir = helpers::get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)?;
+    println!("Default notebook directory initialized at: {default_notebook_dir:?}");
+
+    let templates_dir = get_templates_dir()?;
+    println!("Templates directory ensured at: {templates_dir:?}");
 
     if git {
         match Repository::init(&root_dir) {
@@ -66,7 +81,7 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
             Err(e) if e.code() == git2::ErrorCode::Exists => {
                 println!("Git repository already exists in {root_dir:?}")
             }
-            Err(e) => bail!("Failed to initialize Git repository: {}", e),
+            Err(e) => bail!("Failed to initialize Git repository: {e}"),
         }
     }
 
@@ -87,6 +102,74 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
             fs::write(config_path, config_str)?;
             println!("Saved public key to config.toml.");
             println!("\nYour public key (recipient) is: {recipient}");
+        }
+    }
+    Ok(())
+}
+
+/// Handles notebook management subcommands.
+pub fn command_notebook(notebook_cmd: NotebookCommand) -> Result<()> {
+    match notebook_cmd {
+        NotebookCommand::New { name } => {
+            if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+                bail!(
+                    "Invalid notebook name: '{name}'. Name cannot contain slashes or be '.' or '..'.",
+                );
+            }
+            if name.to_lowercase() == DEFAULT_NOTEBOOK_NAME && name != DEFAULT_NOTEBOOK_NAME {
+                println!(
+                    "Warning: Creating notebook with a name that differs from '{DEFAULT_NOTEBOOK_NAME}' only by case."
+                );
+            }
+            let notebook_path = helpers::get_specific_notebook_dir(&name)?;
+            println!("Successfully created notebook '{name}' at {notebook_path:?}.");
+        }
+        NotebookCommand::List => {
+            let notebooks_root = helpers::get_notebooks_root_dir()?;
+            println!("Available notebooks:");
+            let entries = fs::read_dir(notebooks_root)?;
+            let mut count = 0;
+            for entry in entries.filter_map(Result::ok) {
+                if entry.path().is_dir() {
+                    if let Some(notebook_name) = entry.file_name().to_str() {
+                        println!("  - {notebook_name}");
+                        count += 1;
+                    }
+                }
+            }
+            if count == 0 {
+                println!("  (No notebooks found. The 'default' notebook will be used.)");
+            }
+        }
+        NotebookCommand::Use { name } => {
+            let notebooks_root = helpers::get_notebooks_root_dir()?;
+            let notebook_path = notebooks_root.join(&name);
+            if !notebook_path.is_dir() {
+                bail!(
+                    "Notebook '{name}' not found. Create it first with `rjot notebook new {name}`."
+                );
+            }
+            println!("To activate the notebook '{name}', run the following command in your shell:");
+            println!("# For bash/zsh:");
+            println!("  export {ACTIVE_NOTEBOOK_ENV_VAR}=\"{name}\"");
+            println!("# For fish:");
+            println!("  set -x {ACTIVE_NOTEBOOK_ENV_VAR}=\"{name}\"");
+            println!("# For PowerShell:");
+            println!("  $env:{ACTIVE_NOTEBOOK_ENV_VAR} = \"{name}\"");
+            println!("# For Windows CMD:");
+            println!("  set {ACTIVE_NOTEBOOK_ENV_VAR}={name}");
+            println!("\nRun `rjot info --paths` to verify the change after setting the variable.");
+        }
+        NotebookCommand::Path { name } => {
+            let notebook_path = if let Some(n) = name {
+                if n.contains('/') || n.contains('\\') || n == "." || n == ".." {
+                    bail!("Invalid notebook name: '{n}'. Name cannot contain slashes or be '.' or '..'.");
+                }
+                helpers::get_specific_notebook_dir(&n)?
+            } else {
+                helpers::get_entries_dir()?
+            };
+            println!("{}", notebook_path.display());
         }
     }
     Ok(())
@@ -158,8 +241,7 @@ pub fn command_sync() -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let repo = Repository::open(&root_dir).map_err(|_| {
         anyhow!(
-            "rjot directory at {:?} is not a Git repository. Run `rjot init --git` first.",
-            root_dir
+            "rjot directory at {root_dir:?} is not a Git repository. Run `rjot init --git` first."
         )
     })?;
 
@@ -309,9 +391,8 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
 pub fn command_edit(note_path: PathBuf) -> Result<()> {
     let editor = helpers::get_editor()?;
     println!(
-        "Opening {:?} in {}...",
+        "Opening {:?} in {editor}...",
         &note_path.file_name().unwrap(),
-        &editor
     );
     let status = Command::new(&editor).arg(&note_path).status()?;
     if !status.success() {
@@ -357,7 +438,7 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     note.frontmatter.tags.sort();
     note.frontmatter.tags.dedup();
     let new_frontmatter_str = serde_yaml::to_string(&note.frontmatter)?;
-    let new_content = format!("---\n{}---\n\n{}", new_frontmatter_str, note.content);
+    let new_content = format!("---\n{new_frontmatter_str}---\n\n{}", note.content);
     helpers::write_note_file(&note.path, &new_content)?;
     Ok(())
 }
@@ -377,13 +458,8 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
 }
 
 /// Interactively selects a jot using a fuzzy finder.
-///
-/// This command provides a fast and intuitive way for users to find a specific
-/// note without needing to remember its exact ID or title. It displays an
-/// interactive list in the terminal that can be filtered in real-time.
 #[cfg(not(windows))]
 pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
-    // This struct and its implementation are now inside the conditional block
     struct NoteItem {
         id: String,
         display_text: String,
@@ -407,18 +483,13 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     notes.sort_by(|a, b| b.id.cmp(&a.id));
 
     let options = SkimOptionsBuilder::default()
-        // The .height() option is removed to enable the alternate screen
         .multi(false)
         .reverse(true)
         .build()?;
 
-    // Create a type alias to simplify the complex channel type
     type SkimChannel = (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>);
-
     let (tx, rx): SkimChannel = unbounded();
-    //let (tx, rx): (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>) = unbounded();
 
-    // Create and send custom NoteItem objects instead of plain strings
     for note in notes {
         let display_text = format!(
             "{} | {}",
@@ -429,26 +500,17 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
             id: note.id,
             display_text,
         };
-        // The `tx` channel now sends our custom item
         let _ = tx.send(Arc::new(item));
     }
     drop(tx);
 
-    // Skim::run_with will now use our custom `output()` method.
-    // The library itself handles printing the output of the selected item.
-    // We no longer need to process the results ourselves and print the ID.
     let skim_output = Skim::run_with(&options, Some(rx));
 
-    // If the user hits Esc, skim_output will be None.
-    // If they select an item, skim handles printing the output from our
-    // custom `NoteItem::output` method.
     if let Some(output) = skim_output {
         if output.is_abort {
-            // User aborted (e.g., pressed Esc), so we do nothing.
             return Ok(());
         }
     }
-
     Ok(())
 }
 
@@ -603,9 +665,20 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     }
     if args.paths {
         println!("--- rjot paths ---");
-        println!("Root Directory:  {:?}", helpers::get_rjot_dir_root()?);
-        println!("Entries:         {entries_dir:?}");
-        println!("Templates:       {:?}", helpers::get_templates_dir()?);
+        println!("Root Directory:      {:?}", helpers::get_rjot_dir_root()?);
+        println!("Active Notebook Dir: {entries_dir:?}");
+        println!(
+            "All Notebooks Root:  {:?}",
+            helpers::get_notebooks_root_dir()?
+        );
+        println!("Templates:           {:?}", helpers::get_templates_dir()?);
+
+        match std::env::var(ACTIVE_NOTEBOOK_ENV_VAR) {
+            Ok(val) => println!("Env Var ({ACTIVE_NOTEBOOK_ENV_VAR}): {val}"),
+            Err(_) => println!(
+                "Env Var ({ACTIVE_NOTEBOOK_ENV_VAR}): Not set (using default notebook or --notebook flag)"
+            ),
+        }
     }
     if args.stats {
         println!("\n--- rjot stats ---");

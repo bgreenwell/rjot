@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - YYYY-MM-DD
+
+### Added
+- **Multiple Notebook Support**:
+    - Notes are now organized into notebooks. Default notebook is `default`.
+    - Notes stored in `$RJOT_DIR/notebooks/<notebook_name>/`.
+    - New `notebook` subcommand (alias `nb`):
+        - `rjot notebook new <name>`: Creates a new notebook.
+        - `rjot notebook list`: Lists all available notebooks.
+        - `rjot notebook use <name>`: Prints instructions to set the `RJOT_ACTIVE_NOTEBOOK` environment variable to switch the active notebook for the current shell session.
+        - `rjot notebook path [<name>]`: Shows the full path to the specified notebook, or the active notebook if no name is given.
+    - `RJOT_ACTIVE_NOTEBOOK` environment variable: If set, `rjot` commands operate on this notebook.
+    - Global `--notebook-opt <name>` flag: Allows targeting a specific notebook for a single command execution, overriding `RJOT_ACTIVE_NOTEBOOK` or the default.
+    - All existing commands (`jot`, `new`, `list`, `find`, `tags`, date filters, `edit`, `show`, `delete`, `tag`, `info`) now operate within the context of the active or specified notebook.
+    - `rjot init` now creates the `notebooks/default` directory structure.
+    - `rjot info --paths` updated to show active notebook directory and all notebooks root.
+
+### Changed
+- Default storage path for notes is now `$RJOT_DIR/notebooks/default/` instead of `$RJOT_DIR/entries/`. (The `entries` directory is no longer used for notes).
+
 ## [Unreleased] - 2025-XY-XY
 
 This release focuses on quality-of-life improvements, robust error handling, and a comprehensive test suite to solidify the core user experience before adding advanced features.
