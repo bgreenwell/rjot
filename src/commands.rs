@@ -10,15 +10,19 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
 
 use age::{secrecy::ExposeSecret, x25519, Decryptor, Identity};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
-use crossbeam_channel::unbounded;
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
+
+// Conditionally compile everything related to skim
 #[cfg(not(windows))]
-use skim::prelude::*;
+use {
+    crossbeam_channel::unbounded,
+    skim::prelude::*,
+    std::{borrow::Cow, sync::Arc},
+};
 
 use crate::cli::{InfoArgs, TagAction, TagArgs};
 use crate::helpers::{
@@ -372,31 +376,6 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
     Ok(())
 }
 
-// --- Struct and Trait Implementation for Fuzzy Finding ---
-
-/// A custom struct to hold note information for fuzzy finding.
-///
-/// This struct allows us to define different text for displaying in the fuzzy
-/// finder versus what gets output when an item is selected.
-#[derive(Debug)]
-struct NoteItem {
-    id: String,
-    display_text: String,
-}
-
-impl SkimItem for NoteItem {
-    /// The text that will be displayed to the user in the fuzzy finder list.
-    fn text(&self) -> Cow<str> {
-        Cow::Borrowed(&self.display_text)
-    }
-
-    /// The text that will be returned when an item is selected.
-    /// In our case, we only want the note's ID.
-    fn output(&self) -> Cow<str> {
-        Cow::Borrowed(&self.id)
-    }
-}
-
 /// Interactively selects a jot using a fuzzy finder.
 ///
 /// This command provides a fast and intuitive way for users to find a specific
@@ -404,6 +383,22 @@ impl SkimItem for NoteItem {
 /// interactive list in the terminal that can be filtered in real-time.
 #[cfg(not(windows))]
 pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
+    // This struct and its implementation are now inside the conditional block
+    struct NoteItem {
+        id: String,
+        display_text: String,
+    }
+
+    impl SkimItem for NoteItem {
+        fn text(&self) -> Cow<str> {
+            Cow::Borrowed(&self.display_text)
+        }
+
+        fn output(&self) -> Cow<str> {
+            Cow::Borrowed(&self.id)
+        }
+    }
+
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = vec![];
     for entry in entries.filter_map(Result::ok) {
