@@ -61,7 +61,7 @@ pub fn get_rjot_dir_root() -> Result<PathBuf> {
     };
     if !path.exists() {
         fs::create_dir_all(&path)
-            .with_context(|| format!("Failed to create rjot root directory at {:?}", path))?;
+            .with_context(|| format!("Failed to create rjot root directory at {path:?}"))?;
     }
     Ok(path)
 }
@@ -72,10 +72,7 @@ pub fn get_notebooks_root_dir() -> Result<PathBuf> {
     let notebooks_root = rjot_root.join(NOTEBOOKS_DIR_NAME);
     if !notebooks_root.exists() {
         fs::create_dir_all(&notebooks_root).with_context(|| {
-            format!(
-                "Failed to create notebooks directory at {:?}",
-                notebooks_root
-            )
+            format!("Failed to create notebooks directory at {notebooks_root:?}")
         })?;
     }
     Ok(notebooks_root)
@@ -86,9 +83,8 @@ pub fn get_specific_notebook_dir(notebook_name: &str) -> Result<PathBuf> {
     let notebooks_root = get_notebooks_root_dir()?;
     let notebook_path = notebooks_root.join(notebook_name);
     if !notebook_path.exists() {
-        fs::create_dir_all(&notebook_path).with_context(|| {
-            format!("Failed to create notebook directory at {:?}", notebook_path)
-        })?;
+        fs::create_dir_all(&notebook_path)
+            .with_context(|| format!("Failed to create notebook directory at {notebook_path:?}"))?;
     }
     Ok(notebook_path)
 }
@@ -104,8 +100,7 @@ pub fn get_entries_dir() -> Result<PathBuf> {
                 Ok(specific_notebook_path)
             } else {
                 eprintln!(
-                    "Warning: Notebook \"{}\" specified by {} does not exist. Falling back to default notebook.",
-                    notebook_name, ACTIVE_NOTEBOOK_ENV_VAR
+                    "Warning: Notebook \"{notebook_name}\" specified by {ACTIVE_NOTEBOOK_ENV_VAR} does not exist. Falling back to default notebook."
                 );
                 get_specific_notebook_dir(DEFAULT_NOTEBOOK_NAME)
             }
@@ -120,10 +115,7 @@ pub fn get_templates_dir() -> Result<PathBuf> {
     let templates_dir = root_dir.join("templates");
     if !templates_dir.exists() {
         fs::create_dir_all(&templates_dir).with_context(|| {
-            format!(
-                "Failed to create templates directory at {:?}",
-                templates_dir
-            )
+            format!("Failed to create templates directory at {templates_dir:?}")
         })?;
     }
     Ok(templates_dir)
@@ -163,11 +155,10 @@ pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
         Config::default()
     };
 
-    // Parent directory should be guaranteed to exist by get_specific_notebook_dir or get_entries_dir
     if let Some(recipient_str) = config.recipient {
         let recipient: Recipient = recipient_str
             .parse()
-            .map_err(|e| anyhow!("Failed to parse recipient from config: {}", e))?;
+            .map_err(|e| anyhow!("Failed to parse recipient from config: {e}"))?;
         let encrypted_bytes = {
             let encryptor = Encryptor::with_recipients(vec![Box::new(recipient)]);
             let mut encrypted = vec![];
@@ -291,11 +282,10 @@ pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<Pa
         }
     }
     if matches.is_empty() {
-        bail!("No jot found with the prefix '{}'", prefix);
+        bail!("No jot found with the prefix '{prefix}'");
     } else if matches.len() > 1 {
         bail!(
-            "Prefix '{}' is not unique. Multiple jots found:\n{}",
-            prefix,
+            "Prefix '{prefix}' is not unique. Multiple jots found:\n{}",
             matches
                 .iter()
                 .map(|p| p.file_name().unwrap().to_string_lossy())
@@ -333,10 +323,8 @@ pub fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<P
     }
     if index > total_jots {
         bail!(
-            "Index out of bounds. You asked for the {}{} last jot, but only {} exist.",
-            index,
-            get_ordinal_suffix(index),
-            total_jots
+            "Index out of bounds. You asked for the {index}{NTH} last jot, but only {total_jots} exist.",
+            NTH = get_ordinal_suffix(index)
         );
     }
     entries.sort_by_key(|e| e.file_name());
