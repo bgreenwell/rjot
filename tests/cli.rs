@@ -8,8 +8,8 @@ use tempfile::{tempdir, TempDir};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 // Helper function to set up a test environment
-// This now creates the `notebooks/default` structure
-// to ensure all existing tests run in the default notebook context.
+// This creates the `notebooks/default` structure to ensure all
+// existing tests run in the default notebook context.
 fn setup() -> (TempDir, PathBuf) {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let rjot_dir = temp_dir.path().to_path_buf();
@@ -269,7 +269,7 @@ fn test_git_init_and_sync() -> TestResult {
     Ok(())
 }
 
-// --- NEW TEST MODULE FOR NOTEBOOKS ---
+// Test module for notebooks
 #[cfg(test)]
 mod notebooks {
     use super::*;
@@ -546,7 +546,7 @@ mod notebooks {
     }
 }
 
-// --- NEW TEST MODULE FOR ERROR HANDLING ---
+// Test module for error handling
 #[cfg(test)]
 mod error_handling {
     use super::*;
@@ -614,7 +614,7 @@ mod error_handling {
     }
 }
 
-// --- NEW TEST FOR FULL ENCRYPTION LIFECYCLE ---
+// Test for full encryption feature
 #[test]
 fn test_full_encryption_and_decryption_lifecycle_across_notebooks() -> TestResult {
     let (_temp_dir, rjot_dir) = setup();
@@ -689,4 +689,154 @@ fn test_full_encryption_and_decryption_lifecycle_across_notebooks() -> TestResul
     assert!(!rjot_dir.join("config.toml").exists());
 
     Ok(())
+}
+
+// Test module for pinning feature.
+#[cfg(test)]
+mod pinning {
+    use super::*;
+
+    /// Tests the complete lifecycle of pinning and unpinning a note
+    /// using the `--last` flag and by its ID prefix.
+    #[test]
+    fn test_pin_and_unpin_lifecycle() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Create a couple of notes to work with.
+        Command::cargo_bin("rjot")?
+            .arg("an unimportant note")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        Command::cargo_bin("rjot")?
+            .arg("a very important note")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 2. Pin the last note created.
+        Command::cargo_bin("rjot")?
+            .args(["pin", "--last"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Successfully pinned jot"));
+
+        // 3. Verify the `pinned: true` attribute exists in the file.
+        let entries_dir = rjot_dir.join("notebooks").join("default");
+        let mut entries: Vec<_> = fs::read_dir(entries_dir)?
+            .map(|r| r.unwrap().path())
+            .collect();
+        entries.sort(); // Sort to get the most recent note last.
+        let last_note_path = entries.last().unwrap();
+        let last_note_content = fs::read_to_string(last_note_path)?;
+        assert!(
+            last_note_content.contains("pinned: true"),
+            "The note should contain 'pinned: true' after pinning."
+        );
+
+        // 4. Unpin the same note using its ID prefix.
+        let note_id = last_note_path.file_stem().unwrap().to_str().unwrap();
+        Command::cargo_bin("rjot")?
+            .args(["unpin", note_id])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Successfully unpinned jot"));
+
+        // 5. Verify the `pinned` attribute is now gone from the file.
+        let unpinned_content = fs::read_to_string(last_note_path)?;
+        assert!(
+            !unpinned_content.contains("pinned:"),
+            "The 'pinned' key should be removed after unpinning."
+        );
+
+        Ok(())
+    }
+
+    /// Tests the `list --pinned` command.
+    #[test]
+    fn test_list_pinned_jots() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Create a mix of pinned and unpinned notes.
+        Command::cargo_bin("rjot")?
+            .arg("unpinned note 1")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("pinned note 1")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        Command::cargo_bin("rjot")?
+            .args(["pin", "--last"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("unpinned note 2")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("pinned note 2")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        Command::cargo_bin("rjot")?
+            .args(["pin", "--last"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 2. Run `list --pinned` and verify the output.
+        Command::cargo_bin("rjot")?
+            .args(["list", "--pinned"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("pinned note 1"))
+            .stdout(predicate::str::contains("pinned note 2"))
+            .stdout(predicate::str::contains("unpinned note").not());
+
+        Ok(())
+    }
+
+    /// Tests that re-pinning an already pinned jot doesn't cause an error.
+    #[test]
+    fn test_pinning_is_idempotent() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        Command::cargo_bin("rjot")?
+            .arg("a note to be pinned repeatedly")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Pin it once.
+        Command::cargo_bin("rjot")?
+            .args(["pin", "--last"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // **MODIFICATION**: The assertion now correctly checks for the unique part of the confirmation message.
+        // Pin it again. Should report that it's already pinned.
+        Command::cargo_bin("rjot")?
+            .args(["pin", "--last"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("is already pinned."));
+
+        Ok(())
+    }
 }

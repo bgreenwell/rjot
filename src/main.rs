@@ -30,7 +30,9 @@ fn main() -> Result<()> {
     match cli.command {
         Some(command) => match command {
             Commands::New { template } => commands::command_new(&entries_dir, template)?,
-            Commands::List { count } => commands::command_list(&entries_dir, count)?,
+            Commands::List { count, pinned } => {
+                commands::command_list(&entries_dir, count, pinned)?
+            }
             Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
             Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
             #[cfg(not(windows))]
@@ -56,6 +58,12 @@ fn main() -> Result<()> {
             } => {
                 let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
                 commands::command_delete(note_path, force)?;
+            }
+            Commands::Pin { id_prefix, last } => {
+                commands::command_pin(&entries_dir, id_prefix, last)?
+            }
+            Commands::Unpin { id_prefix, last } => {
+                commands::command_unpin(&entries_dir, id_prefix, last)?
             }
             Commands::Info(args) => commands::command_info(&entries_dir, args)?,
             Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,

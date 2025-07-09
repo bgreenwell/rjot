@@ -361,7 +361,11 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
     let mut content = String::new();
     if let Some(tags) = tags {
         if !tags.is_empty() {
-            let frontmatter = Frontmatter { tags };
+            // `..Default::default()` handles the `pinned` field, setting it to false.
+            let frontmatter = Frontmatter {
+                tags,
+                ..Default::default()
+            };
             let fm_str = serde_yaml::to_string(&frontmatter)?;
             content.push_str("---\n");
             content.push_str(&fm_str);
@@ -467,17 +471,82 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     Ok(())
 }
 
+// A private helper function to toggle the pinned status of a note.
+// This avoids duplicating the logic for finding, parsing, modifying, and saving a note.
+fn command_toggle_pin_status(
+    entries_dir: &Path,
+    id_prefix: Option<String>,
+    last: Option<usize>,
+    pin: bool,
+) -> Result<()> {
+    let note_path = get_note_path_for_action(entries_dir, id_prefix, last)?;
+    let mut note = parse_note_from_file(&note_path)?;
+
+    // Avoid unnecessary writes if the state is already correct.
+    if note.frontmatter.pinned == pin {
+        println!(
+            "Jot '{}' is already {}.",
+            note.id,
+            if pin { "pinned" } else { "unpinned" }
+        );
+        return Ok(());
+    }
+
+    note.frontmatter.pinned = pin;
+
+    // Reconstruct the file content with the updated frontmatter.
+    let new_frontmatter_str = serde_yaml::to_string(&note.frontmatter)?;
+    let new_content = format!("---\n{}---\n\n{}", new_frontmatter_str, note.content);
+    helpers::write_note_file(&note.path, &new_content)?;
+
+    println!(
+        "Successfully {} jot '{}'.",
+        if pin { "pinned" } else { "unpinned" },
+        note.id
+    );
+
+    Ok(())
+}
+
+// Public command function to pin a note.
+pub fn command_pin(
+    entries_dir: &Path,
+    id_prefix: Option<String>,
+    last: Option<usize>,
+) -> Result<()> {
+    command_toggle_pin_status(entries_dir, id_prefix, last, true)
+}
+
+// Public command function to unpin a note.
+pub fn command_unpin(
+    entries_dir: &Path,
+    id_prefix: Option<String>,
+    last: Option<usize>,
+) -> Result<()> {
+    command_toggle_pin_status(entries_dir, id_prefix, last, false)
+}
+
 /// Lists the most recent jots.
-/// No changes needed.
-pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
+pub fn command_list(entries_dir: &PathBuf, count: Option<usize>, pinned: bool) -> Result<()> {
     let num_to_list = count.unwrap_or(10);
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = Vec::new();
+
     for entry in entries.filter_map(Result::ok) {
+        // We parse every note first
         notes.push(parse_note_from_file(&entry.path())?);
     }
+
+    // Filter for pinned notes if the flag is provided.
+    if pinned {
+        notes.retain(|note| note.frontmatter.pinned);
+        println!("Showing pinned jots:");
+    }
+
+    // Sort by date (most recent first) and then truncate to the desired count.
     notes.sort_by(|a, b| b.id.cmp(&a.id));
     notes.truncate(num_to_list);
+
     display_note_list(notes);
     Ok(())
 }

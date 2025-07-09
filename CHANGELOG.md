@@ -13,6 +13,11 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
+  * **Jot Pinning** (addresses [#9](https://github.com/bgreenwell/rjot/issues/9)): You can now pin important jots to keep them easily accessible.
+    * The new `pin` and `unpin` subcommands allow you to toggle the pinned status of any jot.
+    * A `pinned: true` attribute is added to the frontmatter of pinned notes.
+    * The `list` command now includes a `--pinned` flag to show only pinned jots in the active notebook.
+
   * **Multi-Notebook Support** (addresses [\#7](https://github.com/bgreenwell/rjot/issues/7)): `rjot` now supports organizing jots into separate notebooks.
       * A new `notebooks/` directory is created in the `rjot` root to store all notebooks as subdirectories.
       * Automatic, one-time migration for existing users, moving old `entries/` into a `notebooks/default/` directory.

@@ -21,6 +21,7 @@ This project aims to be the perfect, minimalist companion for developers, writer
   * **Instant capture**: Jot down a thought instantly from the command line.
   * **Multiple notebooks**: Organize your jots into separate collections (e.g., `work`, `personal`, `project-x`).
   * **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
+  * **Pinning jots**: Mark essential notes with `rjot pin` to keep them readily accessible with `rjot list --pinned`.
   * **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`, or `on <date-from>...<date-to>`).
   * **Note management**: Easily `show`, `edit`, `tag`, or `delete` any note using a unique ID prefix or its recency (`--last` or `--last=3`).
   * **Standard & configurable**: Follows platform-specific conventions for data storage and respects standard environment variables.
@@ -207,6 +208,20 @@ This command will ask for confirmation unless you use the `--force` flag.
 ```sh
 # Delete a note by ID prefix, with a confirmation prompt
 ❯ rjot delete 2025-06-08-1345
+```
+
+### Pinning and Unpinning Jots
+
+Pinning is a great way to keep important notes from getting buried in your timeline.
+
+**1. Pin a note:**
+You can target a note by its ID or by its recency.
+```sh
+# Pin a specific jot
+❯ rjot pin 2025-07-09-105000
+
+# Pin the last jot you created
+❯ rjot pin --last
 ```
 
 ### Managing tags

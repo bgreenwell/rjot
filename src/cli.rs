@@ -43,6 +43,27 @@ pub enum Commands {
     List {
         /// The number of jots to list. Defaults to 10.
         count: Option<usize>,
+        // A flag to show only pinned jots.
+        #[arg(long, short)]
+        pinned: bool,
+    },
+    /// Pin a jot.
+    Pin {
+        /// The prefix of the jot ID to pin. Must be unique.
+        #[arg(group = "target", required = true)]
+        id_prefix: Option<String>,
+        /// Pin the Nth most recent jot (e.g., --last=1 or just --last).
+        #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
+        last: Option<usize>,
+    },
+    /// Unpin a jot.
+    Unpin {
+        /// The prefix of the jot ID to unpin. Must be unique.
+        #[arg(group = "target", required = true)]
+        id_prefix: Option<String>,
+        /// Unpin the Nth most recent jot.
+        #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
+        last: Option<usize>,
     },
     /// Find jots by searching their content.
     Find {

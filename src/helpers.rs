@@ -24,6 +24,12 @@ pub struct Frontmatter {
     /// A list of tags associated with the note.
     #[serde(default)]
     pub tags: Vec<String>,
+
+    // Represents the pinned status of a note.
+    // The `skip_serializing_if` attribute is an optimization that prevents
+    // `pinned: false` from being written to files, keeping them clean.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
 
 /// Represents a fully parsed jot note, including its metadata and content.
