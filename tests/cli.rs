@@ -840,3 +840,130 @@ mod pinning {
         Ok(())
     }
 }
+
+// Test module for the task feature.
+#[cfg(test)]
+mod tasks {
+    use super::*;
+
+    /// Tests that the `task`, `todo`, and `t` subcommands all create a
+    /// correctly formatted task jot.
+    #[test]
+    fn test_task_creation_and_aliases() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Test the main `task` command
+        Command::cargo_bin("rjot")?
+            .args(["task", "this is the main command"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // 2. Test the `todo` alias
+        Command::cargo_bin("rjot")?
+            .args(["todo", "this is the todo alias"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // 3. Test the `t` alias
+        Command::cargo_bin("rjot")?
+            .args(["t", "this is the t alias"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 4. Verify the contents of the created files
+        let entries_dir = rjot_dir.join("notebooks").join("default");
+        let mut entries: Vec<_> = fs::read_dir(entries_dir)?
+            .map(|r| r.unwrap().path())
+            .collect();
+        entries.sort();
+
+        assert_eq!(entries.len(), 3, "Expected three task jots to be created");
+
+        let content1 = fs::read_to_string(&entries[0])?;
+        let content2 = fs::read_to_string(&entries[1])?;
+        let content3 = fs::read_to_string(&entries[2])?;
+
+        assert!(content1.contains("- [ ] this is the main command"));
+        assert!(content2.contains("- [ ] this is the todo alias"));
+        assert!(content3.contains("- [ ] this is the t alias"));
+
+        Ok(())
+    }
+
+    /// Tests the `list --tasks` command to ensure it only shows jots
+    /// with incomplete tasks.
+    #[test]
+    fn test_list_tasks() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Create a jot with no tasks.
+        Command::cargo_bin("rjot")?
+            .arg("just a regular note")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // 2. Create a jot with only completed tasks.
+        let completed_task_path = rjot_dir
+            .join("notebooks")
+            .join("default")
+            .join("2025-01-01-100000.md");
+        fs::write(completed_task_path, "- [x] This task is done")?;
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // 3. Create a jot with an incomplete task.
+        Command::cargo_bin("rjot")?
+            .args(["task", "this task is pending"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 4. Run `list --tasks` and verify the output.
+        Command::cargo_bin("rjot")?
+            .args(["list", "--tasks"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("this task is pending"))
+            .stdout(predicate::str::contains("regular note").not())
+            .stdout(predicate::str::contains("This task is done").not());
+
+        Ok(())
+    }
+
+    /// Tests the `info --stats` command to verify task summary output.
+    #[test]
+    fn test_info_stats_with_tasks() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Create notes with a mix of pending and completed tasks.
+        let entries_dir = rjot_dir.join("notebooks").join("default");
+        fs::write(
+            entries_dir.join("tasks1.md"),
+            "- [ ] pending 1\n- [x] done 1",
+        )?;
+        fs::write(
+            entries_dir.join("tasks2.md"),
+            "- [ ] pending 2\n- [ ] pending 3",
+        )?;
+        fs::write(entries_dir.join("tasks3.md"), "- [x] done 2")?;
+
+        // 2. Run `info --stats` and check the summary.
+        Command::cargo_bin("rjot")?
+            .args(["info", "--stats"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Task Summary:"))
+            .stdout(predicate::str::contains("Completed: 2"))
+            .stdout(predicate::str::contains("Pending:   3"));
+
+        Ok(())
+    }
+}

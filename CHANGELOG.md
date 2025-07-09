@@ -13,6 +13,11 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
+  * **Task Management** (addresses [#11](https://github.com/bgreenwell/rjot/issues/11)): `rjot` now has first-class support for task lists.
+    * A new `task` command (with aliases `todo` and `t`) instantly creates a jot formatted as a Markdown task (e.g., `- [ ] My new task`).
+    * The `list` command has a new `--tasks` flag to display only jots that contain incomplete tasks.
+    * The `info --stats` command now includes a "Task Summary" section, showing a count of pending and completed tasks across the notebook.
+
   * **Jot Pinning** (addresses [#9](https://github.com/bgreenwell/rjot/issues/9)): You can now pin important jots to keep them easily accessible.
     * The new `pin` and `unpin` subcommands allow you to toggle the pinned status of any jot.
     * A `pinned: true` attribute is added to the frontmatter of pinned notes.

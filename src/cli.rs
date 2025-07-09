@@ -43,9 +43,12 @@ pub enum Commands {
     List {
         /// The number of jots to list. Defaults to 10.
         count: Option<usize>,
-        // A flag to show only pinned jots.
+        /// A flag to show only pinned jots.
         #[arg(long, short)]
         pinned: bool,
+        /// A flag to show only jots containing incomplete tasks.
+        #[arg(long)] // Or short('t') if you prefer
+        tasks: bool,
     },
     /// Pin a jot.
     Pin {
@@ -64,6 +67,13 @@ pub enum Commands {
         /// Unpin the Nth most recent jot.
         #[arg(long, short, group = "target", num_args(0..=1), default_missing_value = "1")]
         last: Option<usize>,
+    },
+    /// Create a new jot formatted as a task.
+    #[command(aliases = ["t", "todo"])] // Optional aliases
+    Task {
+        /// The content of the task.
+        #[arg(required = true)]
+        message: String,
     },
     /// Find jots by searching their content.
     Find {

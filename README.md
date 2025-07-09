@@ -19,6 +19,7 @@ This project aims to be the perfect, minimalist companion for developers, writer
 ## Features
 
   * **Instant capture**: Jot down a thought instantly from the command line.
+  * **Task management**: Quickly create tasks and view all pending items across a notebook.
   * **Multiple notebooks**: Organize your jots into separate collections (e.g., `work`, `personal`, `project-x`).
   * **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
   * **Pinning jots**: Mark essential notes with `rjot pin` to keep them readily accessible with `rjot list --pinned`.
@@ -210,7 +211,28 @@ This command will ask for confirmation unless you use the `--force` flag.
 ❯ rjot delete 2025-06-08-1345
 ```
 
-### Pinning and Unpinning Jots
+### Managing tasks
+
+Many jots are simple to-do lists. `rjot` provides a quick way to create tasks and get a high-level overview of all pending items.
+
+**1. Create a task:**
+Use the `task` subcommand (or its aliases `todo` and `t`) to quickly create a new jot formatted as a Markdown task.
+
+```sh
+❯ rjot task 'Set up the new database schema'
+❯ rjot todo 'Write unit tests for the auth service'
+```
+
+This creates a new note with the content `- [ ] Set up the new database schema`.
+
+**2. View all incomplete tasks:**
+Use the `--tasks` flag with the `list` command to see a list of all jots that contain one or more pending tasks.
+
+```sh
+❯ rjot list --tasks
+```
+
+### Pinning and unpinning notes/jots
 
 Pinning is a great way to keep important notes from getting buried in your timeline.
 
@@ -272,7 +294,7 @@ Get info about your setup:
 # Show storage paths and the active notebook
 ❯ rjot info --paths
 
-# Show note and tag statistics for the active notebook
+# Show note, tag, and task statistics for the active notebook
 ❯ rjot info --stats
 
 # Show combined stats for ALL notebooks

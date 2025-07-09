@@ -27,7 +27,7 @@ use {
 use crate::cli::{InfoArgs, NotebookAction, NotebookArgs, TagAction, TagArgs};
 use crate::helpers::{
     self, display_note_list, get_note_path_for_action, get_notebooks_dir, get_rjot_dir_root,
-    get_templates_dir, parse_note_from_file, Frontmatter,
+    get_templates_dir, parse_note_from_file, Frontmatter, TaskStats,
 };
 
 // --- Notebook Commands ---
@@ -382,6 +382,18 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
     Ok(())
 }
 
+/// Creates a new jot formatted as a Markdown task.
+pub fn command_task(entries_dir: &Path, message: &str) -> Result<()> {
+    let task_content = format!("- [ ] {}", message);
+    println!("Jotting down task: \"{}\"", message);
+    let now = Local::now();
+    let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
+    let file_path = entries_dir.join(filename);
+    helpers::write_note_file(&file_path, &task_content)?;
+    println!("Successfully saved to {:?}", file_path);
+    Ok(())
+}
+
 /// Creates a new jot by opening the default editor.
 /// No changes needed.
 pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
@@ -527,7 +539,12 @@ pub fn command_unpin(
 }
 
 /// Lists the most recent jots.
-pub fn command_list(entries_dir: &PathBuf, count: Option<usize>, pinned: bool) -> Result<()> {
+pub fn command_list(
+    entries_dir: &PathBuf,
+    count: Option<usize>,
+    pinned: bool,
+    tasks: bool,
+) -> Result<()> {
     let num_to_list = count.unwrap_or(10);
     let entries = fs::read_dir(entries_dir)?;
     let mut notes = Vec::new();
@@ -541,6 +558,11 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>, pinned: bool) -
     if pinned {
         notes.retain(|note| note.frontmatter.pinned);
         println!("Showing pinned jots:");
+    }
+
+    if tasks {
+        notes.retain(|note| note.tasks.iter().any(|t| !t.completed));
+        println!("Showing jots with incomplete tasks:");
     }
 
     // Sort by date (most recent first) and then truncate to the desired count.
@@ -791,19 +813,23 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
             let notebooks_dir = get_notebooks_dir()?;
             let mut total_notes = 0;
             let mut all_tags: HashMap<String, usize> = HashMap::new();
+            let mut total_task_stats = TaskStats::default();
 
             for entry in fs::read_dir(notebooks_dir)?.filter_map(Result::ok) {
                 if entry.path().is_dir() {
                     let notebook_path = entry.path();
-                    let (note_count, tag_counts) = calculate_stats_for_dir(&notebook_path)?;
+                    let (note_count, tag_counts, task_stats) =
+                        calculate_stats_for_dir(&notebook_path)?;
                     total_notes += note_count;
                     for (tag, count) in tag_counts {
                         *all_tags.entry(tag).or_insert(0) += count;
                     }
+                    total_task_stats.completed += task_stats.completed;
+                    total_task_stats.pending += task_stats.pending;
                 }
             }
             println!("Stats for all notebooks combined:");
-            print_stats(total_notes, all_tags);
+            print_stats(total_notes, all_tags, total_task_stats);
         } else {
             // Stats for the active notebook only
             let active_notebook_name = entries_dir
@@ -811,17 +837,19 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("default");
             println!("Stats for active notebook: '{active_notebook_name}'");
-            let (note_count, tag_counts) = calculate_stats_for_dir(entries_dir)?;
-            print_stats(note_count, tag_counts);
+            let (note_count, tag_counts, task_stats) = calculate_stats_for_dir(entries_dir)?;
+            print_stats(note_count, tag_counts, task_stats);
         }
     }
     Ok(())
 }
 
 /// Helper function to calculate stats for a given directory.
-fn calculate_stats_for_dir(dir: &Path) -> Result<(usize, HashMap<String, usize>)> {
+fn calculate_stats_for_dir(dir: &Path) -> Result<(usize, HashMap<String, usize>, TaskStats)> {
     let mut note_count = 0;
     let mut tag_counts: HashMap<String, usize> = HashMap::new();
+    let mut task_stats = TaskStats::default();
+
     for entry in fs::read_dir(dir)?.filter_map(Result::ok) {
         if entry.path().is_file() {
             note_count += 1;
@@ -829,13 +857,20 @@ fn calculate_stats_for_dir(dir: &Path) -> Result<(usize, HashMap<String, usize>)
             for tag in note.frontmatter.tags {
                 *tag_counts.entry(tag).or_insert(0) += 1;
             }
+            for task in note.tasks {
+                if task.completed {
+                    task_stats.completed += 1;
+                } else {
+                    task_stats.pending += 1;
+                }
+            }
         }
     }
-    Ok((note_count, tag_counts))
+    Ok((note_count, tag_counts, task_stats))
 }
 
 /// Helper function to print formatted stats.
-fn print_stats(note_count: usize, tag_counts: HashMap<String, usize>) {
+fn print_stats(note_count: usize, tag_counts: HashMap<String, usize>, task_stats: TaskStats) {
     println!("Total jots: {note_count}");
     if !tag_counts.is_empty() {
         let mut sorted_tags: Vec<_> = tag_counts.into_iter().collect();
@@ -845,5 +880,10 @@ fn print_stats(note_count: usize, tag_counts: HashMap<String, usize>) {
         for (tag, count) in sorted_tags {
             println!("  - {tag} ({count})");
         }
+    }
+    if task_stats.completed > 0 || task_stats.pending > 0 {
+        println!("\nTask Summary:");
+        println!("  - Completed: {}", task_stats.completed);
+        println!("  - Pending:   {}", task_stats.pending);
     }
 }

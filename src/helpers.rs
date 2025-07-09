@@ -18,6 +18,21 @@ use which::which;
 
 // --- Data Structures ---
 
+/// Represents a single task item found within a note.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Allow dead code for now, as description will be used later
+pub struct Task {
+    pub description: String,
+    pub completed: bool,
+}
+
+/// Holds aggregated statistics about tasks.
+#[derive(Debug, Default)]
+pub struct TaskStats {
+    pub pending: usize,
+    pub completed: usize,
+}
+
 /// Represents the YAML frontmatter section of a note.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Frontmatter {
@@ -39,6 +54,7 @@ pub struct Note {
     pub path: PathBuf,
     pub frontmatter: Frontmatter,
     pub content: String,
+    pub tasks: Vec<Task>,
 }
 
 /// Represents the `config.toml` file used for encryption settings.
@@ -133,7 +149,6 @@ pub fn get_active_entries_dir(notebook_override: Option<String>) -> Result<PathB
 }
 
 /// Gets the directory where note templates are stored, ensuring it exists.
-/// This function remains unchanged as templates are global.
 pub fn get_templates_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
     let templates_dir = root_dir.join("templates");
@@ -174,7 +189,6 @@ pub fn get_editor() -> Result<String> {
 // --- Core File I/O Logic ---
 
 /// Writes content to a note file, encrypting it if encryption is enabled.
-/// This function remains unchanged as encryption is global.
 pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let config_path = root_dir.join("config.toml");
@@ -204,7 +218,6 @@ pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
 }
 
 /// Reads content from a note file, decrypting it if necessary.
-/// This function remains unchanged as decryption is global.
 pub fn read_note_file(path: &Path) -> Result<String> {
     let root_dir = get_rjot_dir_root()?;
     let identity_path = root_dir.join("identity.txt");
@@ -234,37 +247,52 @@ pub fn read_note_file(path: &Path) -> Result<String> {
 // --- Other Helpers ---
 
 /// Parses a file into a `Note` struct, separating frontmatter from content.
-/// This function remains unchanged.
 pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
     let file_content =
         read_note_file(path).with_context(|| format!("Could not read file: {path:?}"))?;
 
-    if file_content.starts_with("---") {
+    let (frontmatter, content_str) = if file_content.starts_with("---") {
         if let Some(end_frontmatter) = file_content.get(3..).and_then(|s| s.find("---")) {
             let frontmatter_str = &file_content[3..(3 + end_frontmatter)];
-            let content = file_content[(3 + end_frontmatter + 3)..].trim().to_string();
-            let frontmatter: Frontmatter = serde_yaml::from_str(frontmatter_str)
+            let content_part = file_content[(3 + end_frontmatter + 3)..].trim().to_string();
+            let fm: Frontmatter = serde_yaml::from_str(frontmatter_str)
                 .with_context(|| format!("Failed to parse YAML frontmatter in {path:?}"))?;
-            return Ok(Note {
-                id,
-                path: path.to_path_buf(),
-                frontmatter,
-                content,
+            (fm, content_part)
+        } else {
+            (Frontmatter::default(), file_content.clone())
+        }
+    } else {
+        (Frontmatter::default(), file_content.clone())
+    };
+
+    let mut tasks = Vec::new();
+    for line in content_str.lines() {
+        let trimmed_line = line.trim();
+        if let Some(stripped) = trimmed_line.strip_prefix("- [ ] ") {
+            tasks.push(Task {
+                description: stripped.to_string(),
+                completed: false,
+            });
+        } else if let Some(stripped) = trimmed_line.strip_prefix("- [x] ") {
+            tasks.push(Task {
+                description: stripped.to_string(),
+                completed: true,
             });
         }
     }
+
     Ok(Note {
         id,
         path: path.to_path_buf(),
-        frontmatter: Frontmatter::default(),
-        content: file_content,
+        frontmatter,
+        content: content_str,
+        tasks,
     })
 }
 
 /// Determines which note to act on based on user input (ID prefix or `--last` flag).
-/// This function remains unchanged as it operates on a given `entries_dir`.
 pub fn get_note_path_for_action(
     entries_dir: &Path,
     id_prefix: Option<String>,
@@ -284,7 +312,6 @@ pub fn get_note_path_for_action(
 }
 
 /// Formats and prints a list of notes to the console.
-/// This function remains unchanged.
 pub fn display_note_list(notes: Vec<Note>) {
     if notes.is_empty() {
         println!("\nNo jots found.");
@@ -299,7 +326,6 @@ pub fn display_note_list(notes: Vec<Note>) {
 }
 
 /// Formats and prints a compiled summary of notes to the console.
-/// This function remains unchanged.
 pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
     for note in notes {
         println!("---\n\n# {}\n\n{}", note.id, note.content);
@@ -308,7 +334,6 @@ pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
 }
 
 /// Finds a single, unique note file based on a starting prefix of its ID.
-/// This function remains unchanged.
 pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<PathBuf> {
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -335,7 +360,6 @@ pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<Pa
 }
 
 /// Gets the appropriate ordinal suffix for a number (e.g., "st", "nd", "rd", "th").
-/// This function remains unchanged.
 pub fn get_ordinal_suffix(n: usize) -> &'static str {
     if (11..=13).contains(&(n % 100)) {
         "th"
@@ -350,7 +374,6 @@ pub fn get_ordinal_suffix(n: usize) -> &'static str {
 }
 
 /// Finds the Nth most recent note.
-/// This function remains unchanged.
 pub fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathBuf> {
     if index == 0 {
         bail!("--last index must be 1 or greater.");

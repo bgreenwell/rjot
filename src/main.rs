@@ -29,10 +29,13 @@ fn main() -> Result<()> {
     // Match on the subcommand provided by the user.
     match cli.command {
         Some(command) => match command {
+            Commands::Task { message } => commands::command_task(&entries_dir, &message)?,
             Commands::New { template } => commands::command_new(&entries_dir, template)?,
-            Commands::List { count, pinned } => {
-                commands::command_list(&entries_dir, count, pinned)?
-            }
+            Commands::List {
+                count,
+                pinned,
+                tasks,
+            } => commands::command_list(&entries_dir, count, pinned, tasks)?,
             Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
             Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
             #[cfg(not(windows))]
