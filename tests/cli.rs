@@ -544,6 +544,72 @@ mod notebooks {
 
         Ok(())
     }
+
+    #[test]
+    fn test_find_is_scoped_and_global_search_works() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // 1. Create a couple of new notebooks
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "personal"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 2. Create notes with a shared keyword in different notebooks
+        // Note in 'default'
+        Command::cargo_bin("rjot")?
+            .arg("A note about a database_migration in default.")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // Note in 'work'
+        Command::cargo_bin("rjot")?
+            .arg("Work note on the database_migration plan.")
+            .args(["--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // A note without the keyword
+        Command::cargo_bin("rjot")?
+            .arg("A personal note about something else.")
+            .args(["--notebook", "personal"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 3. Test that a normal find is scoped to the active notebook ('default')
+        Command::cargo_bin("rjot")?
+            .args(["find", "database_migration"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("in default"))
+            .stdout(predicate::str::contains("in work").not());
+
+        // 4. Test that `find --all` searches across all notebooks
+        Command::cargo_bin("rjot")?
+            .args(["find", "database_migration", "--all"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("NOTEBOOK")) // Check for new header
+            .stdout(predicate::str::contains("default"))
+            .stdout(predicate::str::contains("work"))
+            .stdout(predicate::str::contains("something else").not());
+
+        Ok(())
+    }
 }
 
 // Test module for error handling

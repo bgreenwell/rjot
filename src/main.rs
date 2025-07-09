@@ -36,7 +36,7 @@ fn main() -> Result<()> {
                 pinned,
                 tasks,
             } => commands::command_list(&entries_dir, count, pinned, tasks)?,
-            Commands::Find { query } => commands::command_find(&entries_dir, &query)?,
+            Commands::Find { query, all } => commands::command_find(&entries_dir, &query, all)?,
             Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
             #[cfg(not(windows))]
             Commands::Select => commands::command_select(&entries_dir)?,

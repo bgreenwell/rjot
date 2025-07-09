@@ -52,6 +52,7 @@ pub struct Frontmatter {
 pub struct Note {
     pub id: String,
     pub path: PathBuf,
+    pub notebook: String,
     pub frontmatter: Frontmatter,
     pub content: String,
     pub tasks: Vec<Task>,
@@ -247,7 +248,7 @@ pub fn read_note_file(path: &Path) -> Result<String> {
 // --- Other Helpers ---
 
 /// Parses a file into a `Note` struct, separating frontmatter from content.
-pub fn parse_note_from_file(path: &Path) -> Result<Note> {
+pub fn parse_note_from_file(path: &Path, notebook_name: &str) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
     let file_content =
@@ -286,6 +287,7 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     Ok(Note {
         id,
         path: path.to_path_buf(),
+        notebook: notebook_name.to_string(), // <-- Populate the new field
         frontmatter,
         content: content_str,
         tasks,

@@ -13,6 +13,8 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
+  * **Global Search** (addresses [#8](https://github.com/bgreenwell/rjot/issues/8)): The `find` command now includes an `--all` flag to search for keywords across every note in every notebook, with an updated output format to show which notebook a result belongs to.
+
   * **Task Management** (addresses [#11](https://github.com/bgreenwell/rjot/issues/11)): `rjot` now has first-class support for task lists.
     * A new `task` command (with aliases `todo` and `t`) instantly creates a jot formatted as a Markdown task (e.g., `- [ ] My new task`).
     * The `list` command has a new `--tasks` flag to display only jots that contain incomplete tasks.

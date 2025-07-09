@@ -142,9 +142,23 @@ You can use the global `--notebook` flag to perform a single action in another n
 ❯ rjot 'Remember to buy milk' --notebook personal
 ```
 
+Excellent\! That's great news. It means the global search feature is fully implemented and correct.
+
+The final step is to update the project's documentation to reflect this new capability. Here are the suggested changes for your `CHANGELOG.md` and `README.md` files.
+
+-----
+
+### `CHANGELOG.md`
+
+Here is a new bullet point to add under the `### Added` section in your changelog.
+
+```markdown
+* **Global Search**: The `find` command now includes an `--all` flag to search for keywords across every note in every notebook, with an updated output format to show which notebook a result belongs to.
+```
+
 ### Viewing and filtering notes
 
-All viewing and filtering commands are scoped to the active notebook.
+All viewing and filtering commands are scoped to the active notebook unless otherwise specified.
 
 **1. List a specific number of recent notes:**
 The `list` command defaults to showing 10 notes, but you can provide a number to see more or less.
@@ -152,12 +166,17 @@ The `list` command defaults to showing 10 notes, but you can provide a number to
 ```sh
 ❯ rjot list
 ❯ rjot list 5
-```
+````
 
-**2. Full-text search of all notes:**
+**2. Full-text search:**
+You can search within the active notebook or use the `--all` flag to search across every notebook.
 
 ```sh
+# Search for 'productivity' in the active notebook
 ❯ rjot find 'productivity'
+
+# Search for 'database' across ALL notebooks
+❯ rjot find 'database' --all
 ```
 
 **3. Filter by one or more tags:**

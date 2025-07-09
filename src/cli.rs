@@ -80,6 +80,10 @@ pub enum Commands {
         /// Text to search for, case-insensitively.
         #[arg(required = true)]
         query: String,
+
+        /// Search across all notebooks.
+        #[arg(long, short)] // Or --global if you prefer
+        all: bool,
     },
     /// Interactively select a note using a fuzzy finder.
     #[command(alias = "s")]
