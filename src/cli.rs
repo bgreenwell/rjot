@@ -21,6 +21,10 @@ pub struct Cli {
     #[arg(long, short, value_delimiter = ',', num_args(1..))]
     pub tags: Option<Vec<String>>,
 
+    /// Run a command in a specific notebook without switching the active one.
+    #[arg(long, global = true)]
+    pub notebook: Option<String>,
+
     /// The message for a new jot. This captures all positional arguments
     /// that are not part of a subcommand.
     pub message: Vec<String>,
@@ -115,6 +119,9 @@ pub enum Commands {
     Info(InfoArgs),
     /// Manage tags on an existing jot.
     Tag(TagArgs),
+    /// Manage notebooks for organizing jots.
+    #[command(alias = "n")]
+    Notebook(NotebookArgs),
     /// Initialize the rjot directory, optionally with Git and/or encryption.
     Init {
         /// Initialize the rjot directory as a Git repository.
@@ -134,6 +141,38 @@ pub enum Commands {
     },
 }
 
+/// Arguments for the `notebook` subcommand.
+#[derive(Args, Debug)]
+pub struct NotebookArgs {
+    /// The notebook management action to perform.
+    #[command(subcommand)]
+    pub action: NotebookAction,
+}
+
+/// An enumeration of all possible notebook management actions.
+#[derive(Subcommand, Debug)]
+pub enum NotebookAction {
+    /// Create a new, empty notebook.
+    New {
+        /// The name for the new notebook.
+        #[arg(required = true)]
+        name: String,
+    },
+    /// List all available notebooks.
+    #[command(alias = "ls")]
+    List,
+    /// Print the command to switch the active notebook for the current shell session.
+    ///
+    /// Usage: eval $(rjot notebook use <NAME>)
+    Use {
+        /// The name of the notebook to switch to.
+        #[arg(required = true)]
+        name: String,
+    },
+    /// Show the currently active notebook.
+    Status,
+}
+
 /// Arguments for the `info` subcommand.
 #[derive(Args, Debug)]
 pub struct InfoArgs {
@@ -143,6 +182,9 @@ pub struct InfoArgs {
     /// Display statistics about your jots, like total count and tag frequency.
     #[arg(long)]
     pub stats: bool,
+    /// Show stats for all notebooks combined.
+    #[arg(long, requires = "stats")]
+    pub all: bool,
 }
 
 /// Arguments for the `tag` subcommand.

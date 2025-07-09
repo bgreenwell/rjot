@@ -6,27 +6,28 @@ A minimalist, command-line jotting utility that's fast, private, git-friendly, a
 [![Crates.io](https://img.shields.io/crates/v/rjot.svg?label=crates.io)](https://crates.io/crates/rjot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
----
-
 ## The vision
 
 `rjot` is a tool for capturing thoughts at the speed of typing. It's built on a few core principles:
 
-* **CLI-first, not CLI-only**: The terminal is the most powerful and frictionless interface for capturing text. `rjot` is designed to be a first-class citizen of your command line.
-* **Plain text is sacred**: Your data is just a folder of Markdown files. It will always be readable, editable, and portable with or without `rjot`. No proprietary formats, no databases, no lock-in.
-* **You own your data**: `rjot` will never push you to a proprietary sync service. It's designed from the ground up to empower you with control over your own data.
+  * **CLI-first, not CLI-only**: The terminal is the most powerful and frictionless interface for capturing text. `rjot` is designed to be a first-class citizen of your command line.
+  * **Plain text is sacred**: Your data is just a folder of Markdown files. It will always be readable, editable, and portable with or without `rjot`. No proprietary formats, no databases, no lock-in.
+  * **You own your data**: `rjot` will never push you to a proprietary sync service. It's designed from the ground up to empower you with control over your own data.
 
 This project aims to be the perfect, minimalist companion for developers, writers, and anyone who lives in the terminal.
 
 ## Features
 
-* **Instant capture**: Jot down a thought instantly from the command line.
-* **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
-* **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`, or `on <date-from>...<date-to>`).
-* **Note management**: Easily `show`, `edit`, `tag`, or `delete` any note using a unique ID prefix or its recency (`--last` or `--last=3`).
-* **Standard & configurable**: Follows platform-specific conventions for data storage and respects standard environment variables.
+  * **Instant capture**: Jot down a thought instantly from the command line.
+  * **Multiple notebooks**: Organize your jots into separate collections (e.g., `work`, `personal`, `project-x`).
+  * **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
+  * **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`, or `on <date-from>...<date-to>`).
+  * **Note management**: Easily `show`, `edit`, `tag`, or `delete` any note using a unique ID prefix or its recency (`--last` or `--last=3`).
+  * **Standard & configurable**: Follows platform-specific conventions for data storage and respects standard environment variables.
 
 ## Installation
+
+**Note:** Once this project gains stable releases, you will be able to install it via your system's package manager (e.g., `apt`, `brew`, etc.). Until then, you can use the methods below.
 
 ### From crates.io (recommended)
 
@@ -41,18 +42,20 @@ This method automatically downloads, compiles, and installs `rjot` on your syste
     ```sh
     cargo install rjot
     ```
+
     This will place the `rjot` executable in your cargo binary path (usually `~/.cargo/bin/`), making it available from anywhere in your terminal.
 
 ### From source
 
 To build the very latest version directly from the source code:
+
 ```sh
 git clone https://github.com/bgreenwell/rjot.git
 cd rjot
 cargo install --path .
 ```
 
----
+-----
 
 ## Usage guide
 
@@ -68,27 +71,27 @@ Your command-line shell (like Bash or Zsh) can interpret special characters like
 
 # BAD: This will probably fail!
 ❯ rjot "This is a great idea!"
-
-# OK (with escaping): If you must use double quotes, escape special characters.
-❯ rjot "Note for user: $USER. This is a great idea\!"
 ```
 
 ### Creating notes
 
+By default, all jots are created in your active notebook (which is `default` until you change it).
+
 **1. Jot down a quick note (the default action):**
+
 ```sh
 ❯ rjot 'This is a quick thought I want to save.'
 ```
 
 **2. Create a tagged, one-liner note:**
 The `--tags` (or `-t`) flag accepts space-separated or comma-separated values.
+
 ```sh
 ❯ rjot 'A great idea for the project' --tags project rust
-# or
-❯ rjot 'Another idea' -t project,rust
 ```
 
 **3. Create a longer note in your editor:**
+
 ```sh
 # This opens your default $EDITOR
 ❯ rjot new
@@ -97,62 +100,102 @@ The `--tags` (or `-t`) flag accepts space-separated or comma-separated values.
 ❯ rjot new --template meeting.md
 ```
 
+### Working with notebooks
+
+`rjot` allows you to organize your notes into separate notebooks. All commands operate on the currently active notebook.
+
+**1. Create a new notebook:**
+
+```sh
+❯ rjot notebook new project-icarus
+Successfully created new notebook: 'project-icarus'
+```
+
+**2. List all available notebooks:**
+An asterisk (`*`) indicates the currently active notebook.
+
+```sh
+❯ rjot notebook list
+Available notebooks (* indicates active):
+  * default
+  project-icarus
+```
+
+**3. Switch your active notebook:**
+Because a program can't change its parent shell's environment, you must use `eval` to make the change take effect for your current terminal session.
+
+```sh
+❯ eval $(rjot notebook use project-icarus)
+
+# To check which notebook is active
+❯ rjot notebook status
+Active notebook: project-icarus
+```
+
+**4. Jot in a different notebook without switching:**
+You can use the global `--notebook` flag to perform a single action in another notebook.
+
+```sh
+# Even if 'project-icarus' is active, this goes to 'personal'
+❯ rjot 'Remember to buy milk' --notebook personal
+```
+
 ### Viewing and filtering notes
+
+All viewing and filtering commands are scoped to the active notebook.
 
 **1. List a specific number of recent notes:**
 The `list` command defaults to showing 10 notes, but you can provide a number to see more or less.
+
 ```sh
 ❯ rjot list
 ❯ rjot list 5
 ```
 
 **2. Full-text search of all notes:**
+
 ```sh
 ❯ rjot find 'productivity'
 ```
 
 **3. Filter by one or more tags:**
-```sh
-# Find notes with the 'project' tag
-❯ rjot tags project
 
-# Find notes with BOTH 'rust' and 'cli' tags
+```sh
+# Find notes with BOTH 'rust' and 'cli' tags in the active notebook
 ❯ rjot tags rust,cli
 ```
 
 **4. View notes from a specific time:**
+
 ```sh
 ❯ rjot today
-❯ rjot yesterday
 ❯ rjot week
-
-# View notes from a specific date or range
-❯ rjot on 2025-05-20
 ❯ rjot on 2025-05-01..2025-05-31
 ```
 
 **5. Compile notes into a summary:**
 Add the `--compile` flag to any time-based view to get a single Markdown summary.
+
 ```sh
 ❯ rjot week --compile > weekly-summary.md
 ```
 
 ### Managing specific notes
 
-The `show`, `edit`, and `delete` commands allow you to target a specific note in two ways: by its ID prefix or by its recency.
+These commands target a specific note within the active notebook.
 
 **1. Show the full content of a note:**
+
 ```sh
 # By ID prefix
 ❯ rjot show 2025-06-08-1345
 
 # By recency (the most recent note)
 ❯ rjot show --last
-# or
-❯ rjot show --last=1
 ```
 
 **2. Edit a note:**
+
 ```sh
 # Edit the 3rd most recent note
 ❯ rjot edit --last=3
@@ -160,33 +203,32 @@ The `show`, `edit`, and `delete` commands allow you to target a specific note in
 
 **3. Delete a note:**
 This command will ask for confirmation unless you use the `--force` flag.
+
 ```sh
 # Delete a note by ID prefix, with a confirmation prompt
 ❯ rjot delete 2025-06-08-1345
-
-# Delete the last note without a prompt
-❯ rjot delete --last --force
 ```
 
 ### Managing tags
 
-Use the `tag` subcommand to modify tags on an existing note without opening an editor.
-
-**Important:** The `tag` command requires you to target a note with either `--last=<N>` or `-p <ID_PREFIX>`.
+Use the `tag` subcommand to modify tags on an existing note in the active notebook.
 
 **1. Add tags to a note:**
+
 ```sh
 # Add 'rust' and 'idea' to the last jot
 ❯ rjot tag add --last=1 rust,idea
 ```
 
 **2. Remove tags from a note:**
+
 ```sh
 # Remove the 'idea' tag from a specific jot
 ❯ rjot tag rm -p 2025-06-09 idea
 ```
 
 **3. Overwrite all tags on a note:**
+
 ```sh
 # Replace all tags on the 2nd to last jot with 'archived'
 ❯ rjot tag set --last=2 archived
@@ -195,153 +237,83 @@ Use the `tag` subcommand to modify tags on an existing note without opening an e
 ### Utility commands
 
 Get info about your setup:
+
 ```sh
-# Show storage paths
+# Show storage paths and the active notebook
 ❯ rjot info --paths
 
-# Show note and tag statistics
+# Show note and tag statistics for the active notebook
 ❯ rjot info --stats
+
+# Show combined stats for ALL notebooks
+❯ rjot info --stats --all
 ```
 
 ### Git integration (optional)
 
-`rjot` offers a convenient, built-in way to version control and synchronize your notes using Git. This is an optional feature for users who are comfortable with Git concepts. You can always manage the repository manually by running `git` commands inside your `rjot` data directory.
+`rjot` offers a convenient, built-in way to version control your notes. The git repository is initialized at the `rjot` root, meaning a single repo tracks all of your notebooks.
 
 #### One-time setup
 
 1.  **Initialize `rjot` with Git:**
-    This command prepares your `rjot` data directory and initializes a Git repository inside it.
+
     ```sh
     ❯ rjot init --git
     ```
 
 2.  **Create a private remote repository:**
-    Go to GitHub (or another Git provider) and create a new, empty **private** repository (e.g., named `my-journal`). Do not add a README or license file.
+    Go to GitHub (or another Git provider) and create a new, empty **private** repository.
 
 3.  **Link the remote:**
-    Navigate into your `rjot` directory (`rjot info --paths` will show you where) and add the remote you just created.
+    Navigate into your `rjot` directory (`rjot info --paths` will show you where) and add the remote.
+
     ```sh
     # Example for GitHub over SSH
     ❯ git remote add origin git@github.com:YOUR_USERNAME/my-journal.git
-
-    # Example for GitHub over HTTPS
-    ❯ git remote add origin [https://github.com/YOUR_USERNAME/my-journal.git](https://github.com/YOUR_USERNAME/my-journal.git)
     ```
 
 #### The `sync` command
 
-Once set up, you can use the `sync` command from anywhere to save your work.
+Once set up, `rjot sync` will automatically stage, commit, and push changes from all notebooks.
+
 ```sh
 ❯ rjot sync
 ```
-This single command will automatically:
-1.  Stage all your new and modified notes (`git add .`).
-2.  Create a commit with a timestamped message.
-3.  Push the changes to your `origin` remote on your current branch.
 
-#### How authentication works
+### Encryption (optional)
 
-The `rjot sync` command is designed to be secure and work automatically with common Git authentication methods. It will try the following, in order:
-
-1.  **HTTPS (Personal Access Token):** If your remote URL uses `https://` and you have a `GITHUB_TOKEN` environment variable set, it will use that token for authentication.
-2.  **SSH Agent:** If your remote URL uses `ssh://` (or `git@`), it will first try to authenticate using your system's SSH agent.
-3.  **Default SSH Keys:** If the SSH agent fails, it will look for your default SSH key files (e.g., `~/.ssh/id_rsa`).
-4.  **Git Credential Helper:** As a final fallback, it will try to use Git's configured credential helper.
-
-#### Encryption (optional)
-
-For maximum privacy, you can enable transparent, on-disk encryption. This allows you to store your notes on any cloud service securely.
+For maximum privacy, you can enable transparent, on-disk encryption for all notebooks. The encryption keys are stored globally in your `rjot` root directory.
 
 **One-time setup:**
 
-1.  **Enable encryption:**
-    This command generates a secret key (`identity.txt`) and a public key (`config.toml`) inside your `rjot` directory.
-    
-    ```sh
-    ❯ rjot init --encrypt
-    ```
-    
-    **IMPORTANT:** You must back up the `identity.txt` file somewhere safe. If you lose it, your notes cannot be recovered. The `.gitignore` file created by `rjot init --git` will prevent this file from being committed.
+```sh
+❯ rjot init --encrypt
+```
 
-**How it works:**
-
-After running `init --encrypt`, every new or edited note will be automatically encrypted when saved and decrypted when read. The process is completely transparent. If you try to open a note file with a normal text editor, you will only see unreadable encrypted text.
+**IMPORTANT:** You must back up the `identity.txt` file somewhere safe. If you lose it, your notes cannot be recovered.
 
 **Turning off encryption:**
-
-If you ever want to convert your journal back to plain text, you can use the `decrypt` command.
+The `decrypt` command will permanently decrypt all notes in all notebooks.
 
 ```sh
-# This will permanently decrypt all notes and remove the key files
 ❯ rjot decrypt
 ```
+
 ## Configuration
 
-### File storage location
-
-`rjot` respects platform conventions. By default, notes are stored in the `entries` sub-folder of:
-
-* **macOS:** `~/Users/<YourUsername>/Library/Application Support/rjot/`
-* **Linux:** `~/.config/rjot/`
-* **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\rjot\`
-
-You can always override this by setting the `$RJOT_DIR` environment variable.
-
-### Templates
-
-Create custom templates in the `templates` subdirectory of your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable: `{{date}}`, which will be replaced with the current timestamp.
-
-### Pro-tip: create a personal alias
-
-For faster, more ergonomic use, you can create a personal alias for `rjot`. This allows you to type a short command like `jd` instead of `rjot`.
-
-Here’s how to set it up for your specific operating system:
-
-#### For macOS and Linux (zsh or bash)
-
-1.  **Identify your shell's config file:**
-    * If you're on a modern Mac, you are likely using `zsh`, so the file is `~/.zshrc`.
-    * On most Linux distributions, you are likely using `bash`, so the file is `~/.bashrc`.
-
-2.  **Add the alias to the file:**
-    Run the following command in your terminal.
-
-    ```sh
-    # For zsh (macOS) or bash (Linux)
-    echo "alias jd='rjot'" >> ~/.zshrc # Or ~/.bashrc
-    ```
-
-3.  **Apply the changes:**
-    For the changes to take effect, either close and reopen your terminal, or run `source ~/.zshrc` (or `source ~/.bashrc`).
-
-#### For Windows (PowerShell)
-
-1.  **Check for (or create) a profile file:**
-
-    ```powershell
-    if (!(Test-Path $PROFILE)) { New-Item -Path $PROFILE -Type File -Force }
-    ```
-
-2.  **Add the alias to your profile:**
-
-    ```powershell
-    Add-Content -Path $PROFILE -Value "function jd { rjot.exe @args }"
-    ```
-
-3.  **Apply the changes:**
-    Close and reopen your PowerShell window, or run `. $PROFILE`.
+`rjot` respects platform conventions for file storage and the `$RJOT_DIR` environment variable. Your notes are stored in `notebooks/` inside the `rjot` root directory.
 
 ## Roadmap
 
 `rjot` is under active development. The next major step is to implement the "power features":
 
-* [x] **Git integration**: `rjot init --git` to turn your journal into a version-controlled repository, and `rjot sync` to automate commits and sync with a remote.
-* [x] **Encryption**: `rjot init --encrypt` to enable transparent, on-disk file encryption using `age` for ultimate privacy.
-* [ ] **Reminders**: `rjot remind` to set system-level notifications (e.g., `rjot remind me in 1 hour to...`).
+  * [x] **Git integration**
+  * [x] **Encryption**
+  * [ ] **Reminders**: `rjot remind` to set system-level notifications.
 
 ## Contributing
 
-This project is open source and contributions are welcome! Please feel free to open an issue or submit a pull request.
+This project is open source and contributions are welcome\! Please feel free to open an issue or submit a pull request.
 
 ## License
 

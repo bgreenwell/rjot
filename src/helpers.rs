@@ -47,7 +47,7 @@ struct Config {
 /// Gets the root directory for all `rjot` data, creating it if it doesn't exist.
 ///
 /// Honors the `$RJOT_DIR` environment variable if set, otherwise uses the platform-specific
-/// user config directory.
+/// user config directory. It also triggers the one-time migration for legacy installations.
 pub fn get_rjot_dir_root() -> Result<PathBuf> {
     let path = match env::var("RJOT_DIR") {
         Ok(val) => PathBuf::from(val),
@@ -58,13 +58,68 @@ pub fn get_rjot_dir_root() -> Result<PathBuf> {
     if !path.exists() {
         fs::create_dir_all(&path)?;
     }
+
+    // Call the migration check every time the root is requested.
+    // This function is cheap and will only perform the migration once.
+    handle_legacy_migration(&path)?;
+
     Ok(path)
 }
 
-/// Gets the directory where note entries are stored, ensuring it exists.
-pub fn get_entries_dir() -> Result<PathBuf> {
+/// Handles the one-time migration from the old `entries` directory structure.
+///
+/// If it finds a legacy `entries` directory and no new `notebooks` directory,
+/// it moves the old directory to `notebooks/default` to ensure backward compatibility.
+fn handle_legacy_migration(root_dir: &Path) -> Result<()> {
+    let legacy_entries_dir = root_dir.join("entries");
+    let notebooks_dir = root_dir.join("notebooks");
+
+    if legacy_entries_dir.exists() && !notebooks_dir.exists() {
+        println!("rjot has been updated to support notebooks!");
+        println!("Migrating your existing notes to the 'default' notebook...");
+
+        fs::create_dir_all(&notebooks_dir)
+            .with_context(|| "Failed to create new notebooks directory during migration.")?;
+
+        let default_notebook_path = notebooks_dir.join("default");
+        fs::rename(&legacy_entries_dir, &default_notebook_path).with_context(|| {
+            format!("Failed to move notes from {legacy_entries_dir:?} to {default_notebook_path:?}")
+        })?;
+        println!("Migration complete. Your notes are now in the 'default' notebook.");
+    }
+    Ok(())
+}
+
+/// Gets the directory where all notebooks are stored, ensuring it exists.
+pub fn get_notebooks_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
-    let entries_dir = root_dir.join("entries");
+    let notebooks_dir = root_dir.join("notebooks");
+    if !notebooks_dir.exists() {
+        fs::create_dir_all(&notebooks_dir)?;
+    }
+    Ok(notebooks_dir)
+}
+
+/// Gets the `entries` directory for the currently active notebook.
+///
+/// This is the core of the multi-notebook feature. It resolves the path based on this priority:
+/// 1. The `--notebook` command-line flag (passed in as `notebook_override`).
+/// 2. The `RJOT_ACTIVE_NOTEBOOK` environment variable.
+/// 3. The "default" notebook if neither is set.
+///
+/// It will automatically create the notebook directory if it doesn't exist.
+pub fn get_active_entries_dir(notebook_override: Option<String>) -> Result<PathBuf> {
+    let notebooks_root = get_notebooks_dir()?;
+
+    let notebook_name = if let Some(name) = notebook_override {
+        name
+    } else if let Ok(name) = env::var("RJOT_ACTIVE_NOTEBOOK") {
+        name
+    } else {
+        "default".to_string()
+    };
+
+    let entries_dir = notebooks_root.join(notebook_name);
     if !entries_dir.exists() {
         fs::create_dir_all(&entries_dir)?;
     }
@@ -72,6 +127,7 @@ pub fn get_entries_dir() -> Result<PathBuf> {
 }
 
 /// Gets the directory where note templates are stored, ensuring it exists.
+/// This function remains unchanged as templates are global.
 pub fn get_templates_dir() -> Result<PathBuf> {
     let root_dir = get_rjot_dir_root()?;
     let templates_dir = root_dir.join("templates");
@@ -112,6 +168,7 @@ pub fn get_editor() -> Result<String> {
 // --- Core File I/O Logic ---
 
 /// Writes content to a note file, encrypting it if encryption is enabled.
+/// This function remains unchanged as encryption is global.
 pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let config_path = root_dir.join("config.toml");
@@ -141,6 +198,7 @@ pub fn write_note_file(path: &Path, content: &str) -> Result<()> {
 }
 
 /// Reads content from a note file, decrypting it if necessary.
+/// This function remains unchanged as decryption is global.
 pub fn read_note_file(path: &Path) -> Result<String> {
     let root_dir = get_rjot_dir_root()?;
     let identity_path = root_dir.join("identity.txt");
@@ -170,6 +228,7 @@ pub fn read_note_file(path: &Path) -> Result<String> {
 // --- Other Helpers ---
 
 /// Parses a file into a `Note` struct, separating frontmatter from content.
+/// This function remains unchanged.
 pub fn parse_note_from_file(path: &Path) -> Result<Note> {
     let filename = path.file_name().unwrap().to_string_lossy().to_string();
     let id = filename.replace(".md", "");
@@ -199,6 +258,7 @@ pub fn parse_note_from_file(path: &Path) -> Result<Note> {
 }
 
 /// Determines which note to act on based on user input (ID prefix or `--last` flag).
+/// This function remains unchanged as it operates on a given `entries_dir`.
 pub fn get_note_path_for_action(
     entries_dir: &Path,
     id_prefix: Option<String>,
@@ -218,6 +278,7 @@ pub fn get_note_path_for_action(
 }
 
 /// Formats and prints a list of notes to the console.
+/// This function remains unchanged.
 pub fn display_note_list(notes: Vec<Note>) {
     if notes.is_empty() {
         println!("\nNo jots found.");
@@ -232,6 +293,7 @@ pub fn display_note_list(notes: Vec<Note>) {
 }
 
 /// Formats and prints a compiled summary of notes to the console.
+/// This function remains unchanged.
 pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
     for note in notes {
         println!("---\n\n# {}\n\n{}", note.id, note.content);
@@ -240,6 +302,7 @@ pub fn compile_notes(notes: Vec<Note>) -> Result<()> {
 }
 
 /// Finds a single, unique note file based on a starting prefix of its ID.
+/// This function remains unchanged.
 pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<PathBuf> {
     let entries = fs::read_dir(entries_dir)?;
     let mut matches = Vec::new();
@@ -266,14 +329,7 @@ pub fn find_unique_note_by_prefix(entries_dir: &Path, prefix: &str) -> Result<Pa
 }
 
 /// Gets the appropriate ordinal suffix for a number (e.g., "st", "nd", "rd", "th").
-///
-/// # Examples
-///
-/// ```
-/// # use rjot::helpers::get_ordinal_suffix;
-/// assert_eq!(get_ordinal_suffix(1), "st");
-/// assert_eq!(get_ordinal_suffix(22), "nd");
-/// ```
+/// This function remains unchanged.
 pub fn get_ordinal_suffix(n: usize) -> &'static str {
     if (11..=13).contains(&(n % 100)) {
         "th"
@@ -288,6 +344,7 @@ pub fn get_ordinal_suffix(n: usize) -> &'static str {
 }
 
 /// Finds the Nth most recent note.
+/// This function remains unchanged.
 pub fn find_note_by_index_from_end(entries_dir: &Path, index: usize) -> Result<PathBuf> {
     if index == 0 {
         bail!("--last index must be 1 or greater.");

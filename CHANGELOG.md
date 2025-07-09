@@ -1,3 +1,5 @@
+### `CHANGELOG.md`
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -5,59 +7,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-XY-XY
+## [Unreleased] - 2025-07-08
 
-This release focuses on quality-of-life improvements, robust error handling, and a comprehensive test suite to solidify the core user experience before adding advanced features.
+This release focuses on a major organizational improvement: multi-notebook support. It also includes quality-of-life improvements, robust error handling, and a comprehensive test suite to solidify the core user experience.
 
 ### Added
 
-* A new `select` subcommand (alias `s`) that launches an interactive fuzzy finder, allowing users to quickly search and select a note.
-
-* The `--encrypt` flag for the `init` command, which generates a new cryptographic key and enables transparent, on-disk encryption for all notes.
-
-* A new `decrypt` subcommand to permanently decrypt all notes in the journal and remove the encryption keys.
-
-* A new optional `<COUNT>` argument to the `list` subcommand to allow users to specify how many recent notes to display (e.g., `rjot list 20`).
-
-* A new `init` subcommand to initialize the `rjot` directory.
-
-*  The `--git` flag for the `init` command, which turns the `rjot` data directory into a local Git repository.
-
-* A new `sync` subcommand that automatically stages all changes, creates a timestamped commit, and pushes to a remote repository named `origin`.
-
-* The `sync` command now includes robust authentication logic that automatically handles both SSH and HTTPS (via a `GITHUB_TOKEN` environment variable) remotes.
-
-* A new `tag` subcommand was introduced to manage metadata on existing notes. It includes `add`, `rm` (remove), and `set` actions to modify tags without opening an editor.
-
-* The `--last=<N>` flag was added to `show`, `edit`, and `delete` commands, allowing users to easily target the Nth most recent note (e.g., `--last` for the last note, `--last=2` for the second to last).
-
-* A comprehensive integration test suite was created in the `tests/` directory to cover all major commands and user workflows.
-
-* A unit test was added to `src/main.rs` to validate the logic for generating ordinal suffixes (st, nd, rd, th).
-
-* A GitHub Actions workflow was added to automatically run `cargo fmt`, `cargo clippy`, and `cargo test` on Linux, macOS, and Windows to ensure code quality and cross-platform compatibility.
-
-* A "pro-tip" section was added to the `README.md` with instructions on how to create a personal shell alias for `rjot` on all major operating systems.
+  * **Multi-Notebook Support** (addresses [\#7](https://github.com/bgreenwell/rjot/issues/7)): `rjot` now supports organizing jots into separate notebooks.
+      * A new `notebooks/` directory is created in the `rjot` root to store all notebooks as subdirectories.
+      * Automatic, one-time migration for existing users, moving old `entries/` into a `notebooks/default/` directory.
+      * All commands (`list`, `find`, `today`, etc.) are now scoped to an **active notebook**.
+      * The active notebook is determined by the `RJOT_ACTIVE_NOTEBOOK` environment variable, or falls back to `default`.
+  * A new `notebook` subcommand (alias `n`) for managing notebooks:
+      * `rjot notebook new <NAME>`: Creates a new notebook.
+      * `rjot notebook list`: Lists all available notebooks, highlighting the active one.
+      * `rjot notebook use <NAME>`: Prints the shell command to switch the active notebook session.
+      * `rjot notebook status`: Displays the currently active notebook.
+  * A global `--notebook <NAME>` flag to execute a single command in a specific notebook without changing the active session.
+  * The `info --stats` command now displays stats for the active notebook.
+  * A new `--all` flag for `info --stats` to show combined statistics for all notebooks.
+  * An extensive suite of integration tests for all notebook functionality, including error handling and edge cases.
+  * The `decrypt` command now operates globally, decrypting all notes in all notebooks at once.
 
 ### Changed
 
-* The project has been refactored into multiple source files (`main.rs`, `cli.rs`, `commands.rs`, `helpers.rs`) for better organization and maintainability.
-
-* The logic for finding an editor for the `new` and `edit` commands was improved. It now gracefully falls back to common editors like `vim` or `nano` if the `$EDITOR` environment variable is not set.
-
-* The `tag add`, `tag rm`, and `tag set` subcommands were updated to use a consistent `--id-prefix` (or `-p`) flag for targeting notes, improving clarity and preventing argument parsing errors.
+  * The project has been refactored into multiple source files (`main.rs`, `cli.rs`, `commands.rs`, `helpers.rs`) for better organization and maintainability.
+  * The `info --paths` command has been updated to display the full notebook path structure.
+  * The logic for finding an editor for the `new` and `edit` commands was improved. It now gracefully falls back to common editors like `vim` or `nano` if the `$EDITOR` environment variable is not set.
 
 ### Fixed
 
-* An "out of bounds" error was fixed where using `--last` with a number larger than the total number of notes would incorrectly target the first note; it now provides a clear error message.
-
-* A bug in the integration tests was fixed where an incorrect number of arguments was passed to the `tag` command, causing a test failure.
-
-* A cross-platform compatibility issue in the test suite was resolved. The mock editor script is now created as a `.bat` file on Windows, allowing all tests to pass.
-
-* The `README.md` was updated to reflect the correct default storage path on macOS (`~/Library/Application Support/rjot`).
-
-* A warning about shell character expansion (`!`) was added to the `README.md` to guide users on the best practice of using single quotes for notes.
+  * A race condition in the test suite where notes created in rapid succession could have the same filename was fixed by adding a small delay.
+  * The `init --git` command now creates a `.gitignore` that correctly tracks notebook files by default, only ignoring sensitive key files.
+  * An "out of bounds" error was fixed where using `--last` with a number larger than the total number of notes would incorrectly target the first note; it now provides a clear error message.
 
 ## [0.1.0](https://github.com/bgreenwell/rjot/releases/tag/v0.1.0) - 2025-06-08
 

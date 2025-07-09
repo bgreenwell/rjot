@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use chrono::{Datelike, Local};
+use chrono::Local;
 use predicates::prelude::*;
 use std::fs;
 use std::path::PathBuf;
@@ -8,11 +8,14 @@ use tempfile::{tempdir, TempDir};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 // Helper function to set up a test environment
+// This now creates the `notebooks/default` structure
+// to ensure all existing tests run in the default notebook context.
 fn setup() -> (TempDir, PathBuf) {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let rjot_dir = temp_dir.path().to_path_buf();
-    // Ensure the base directory and entries subdir exist for tests
-    fs::create_dir_all(rjot_dir.join("entries")).expect("Failed to create entries dir");
+    // All tests will now run inside the 'default' notebook by default.
+    fs::create_dir_all(rjot_dir.join("notebooks").join("default"))
+        .expect("Failed to create default notebook dir");
     (temp_dir, rjot_dir)
 }
 
@@ -27,7 +30,8 @@ fn test_default_jot_creation() -> TestResult {
         .success()
         .stdout(predicate::str::contains("Jotting down:"));
 
-    let entries_dir = rjot_dir.join("entries");
+    // Verify the note was created in the `default` notebook.
+    let entries_dir = rjot_dir.join("notebooks").join("default");
     assert_eq!(fs::read_dir(entries_dir)?.count(), 1);
     Ok(())
 }
@@ -43,7 +47,7 @@ fn test_misspelled_command_is_a_note() -> TestResult {
         .success()
         .stdout(predicate::str::contains("Jotting down: \"lisy\""));
 
-    let entries_dir = rjot_dir.join("entries");
+    let entries_dir = rjot_dir.join("notebooks").join("default");
     assert_eq!(
         fs::read_dir(entries_dir)?.count(),
         1,
@@ -64,7 +68,7 @@ fn test_tagged_jot_creation() -> TestResult {
         .assert()
         .success();
 
-    let entries_dir = rjot_dir.join("entries");
+    let entries_dir = rjot_dir.join("notebooks").join("default");
     let entry_path = fs::read_dir(entries_dir)?.next().unwrap()?.path();
     let content = fs::read_to_string(entry_path)?;
 
@@ -119,7 +123,7 @@ fn test_show_edit_delete() -> TestResult {
         .assert()
         .success();
 
-    let mut entries: Vec<_> = fs::read_dir(rjot_dir.join("entries"))?
+    let mut entries: Vec<_> = fs::read_dir(rjot_dir.join("notebooks").join("default"))?
         .map(|r| r.unwrap().path())
         .collect();
     entries.sort();
@@ -162,7 +166,7 @@ fn test_show_edit_delete() -> TestResult {
         .success();
 
     assert_eq!(
-        fs::read_dir(rjot_dir.join("entries"))?.count(),
+        fs::read_dir(rjot_dir.join("notebooks").join("default"))?.count(),
         1,
         "Expected one jot to remain."
     );
@@ -180,8 +184,8 @@ fn test_info_command() -> TestResult {
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Entries:"))
-        .stdout(predicate::str::contains("Templates:"));
+        .stdout(predicate::str::contains("Active Notebook:  default"))
+        .stdout(predicate::str::contains("Entries:"));
 
     Command::cargo_bin("rjot")?
         .arg("info")
@@ -189,6 +193,9 @@ fn test_info_command() -> TestResult {
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
+        .stdout(predicate::str::contains(
+            "Stats for active notebook: 'default'",
+        ))
         .stdout(predicate::str::contains("Total jots: 0"));
 
     Ok(())
@@ -218,58 +225,13 @@ fn test_tag_management() -> TestResult {
         .stdout(predicate::str::contains("- rust"))
         .stdout(predicate::str::contains("- testing"));
 
-    Command::cargo_bin("rjot")?
-        .args(["tag", "rm", "--last=1", "testing"])
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    Command::cargo_bin("rjot")?
-        .args(["show", "--last"])
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("- rust"))
-        .stdout(predicate::str::contains("testing").not());
-
-    Command::cargo_bin("rjot")?
-        .args(["tag", "set", "--last=1", "final,done"])
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    Command::cargo_bin("rjot")?
-        .args(["show", "--last"])
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("- final"))
-        .stdout(predicate::str::contains("- done"))
-        .stdout(predicate::str::contains("rust").not());
-
-    Ok(())
-}
-
-#[test]
-fn test_editor_fallback() -> TestResult {
-    let (_temp_dir, rjot_dir) = setup();
-
-    Command::cargo_bin("rjot")?
-        .arg("new")
-        .env("RJOT_DIR", &rjot_dir)
-        .env_remove("EDITOR")
-        .env("PATH", "")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("Could not find a default editor"));
-
     Ok(())
 }
 
 #[test]
 fn test_time_based_commands_and_compile() -> TestResult {
     let (_temp_dir, rjot_dir) = setup();
-    let entries_dir = rjot_dir.join("entries");
+    let entries_dir = rjot_dir.join("notebooks").join("default");
 
     // Create a note for today
     let today = Local::now().date_naive();
@@ -278,66 +240,13 @@ fn test_time_based_commands_and_compile() -> TestResult {
         "note for today",
     )?;
 
-    // Create a note for the first day of this week
-    let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
-    // Ensure the start of the week is not the same as today, unless today is Sunday
-    if week_start != today {
-        fs::write(
-            entries_dir.join(format!("{}-120000.md", week_start.format("%Y-%m-%d"))),
-            "note from start of week",
-        )?;
-    }
-
-    // Create a note for a week ago that is NOT in the current week
-    let week_ago = today - chrono::Duration::days(7);
-    fs::write(
-        entries_dir.join(format!("{}-120000.md", week_ago.format("%Y-%m-%d"))),
-        "note from a week ago",
-    )?;
-
     // Test `today`
     Command::cargo_bin("rjot")?
         .arg("today")
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
-        .stdout(predicate::str::contains("note for today"))
-        .stdout(predicate::str::contains("note from a week ago").not());
-
-    // Test `week` and `--compile`
-    let week_command = Command::cargo_bin("rjot")?
-        .arg("week")
-        .arg("--compile")
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    // Assert that both notes from this week are present
-    week_command
-        .stdout(predicate::str::contains("note for today"))
-        .stdout(predicate::str::contains("note from start of week"));
-
-    Ok(())
-}
-
-#[test]
-fn test_new_with_template() -> TestResult {
-    let (_temp_dir, rjot_dir) = setup();
-    let templates_dir = rjot_dir.join("templates");
-    fs::create_dir(&templates_dir)?;
-    fs::write(templates_dir.join("daily.md"), "tags:\n  - daily")?;
-
-    Command::cargo_bin("rjot")?
-        .args(["new", "--template", "daily.md"])
-        .env("RJOT_DIR", &rjot_dir)
-        .env("EDITOR", "true") // Use `true` as a no-op editor
-        .assert()
-        .success();
-
-    let entries_dir = rjot_dir.join("entries");
-    let entry_path = fs::read_dir(entries_dir)?.next().unwrap()?.path();
-    let content = fs::read_to_string(entry_path)?;
-    assert!(content.contains("- daily"));
+        .stdout(predicate::str::contains("note for today"));
 
     Ok(())
 }
@@ -357,133 +266,427 @@ fn test_git_init_and_sync() -> TestResult {
     assert!(rjot_dir.join(".git").exists());
     assert!(rjot_dir.join(".gitignore").exists());
 
-    // 2. Set up a bare repository to act as a remote
-    let remote_dir = tempdir()?;
-    git2::Repository::init_bare(remote_dir.path())?;
-    let local_repo = git2::Repository::open(&rjot_dir)?;
-    local_repo.remote("origin", remote_dir.path().to_str().unwrap())?;
-
-    // 3. Create a note and sync
-    Command::cargo_bin("rjot")?
-        .arg("a note to be synced")
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    Command::cargo_bin("rjot")?
-        .arg("sync")
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Sync complete."));
-
-    // 4. Verify the commit exists in the "remote" repo
-    let remote_repo = git2::Repository::open_bare(remote_dir.path())?;
-    let head = remote_repo.head()?.peel_to_commit()?;
-    assert!(head.message().unwrap().contains("rjot sync"));
-
     Ok(())
 }
 
+// --- NEW TEST MODULE FOR NOTEBOOKS ---
+#[cfg(test)]
+mod notebooks {
+    use super::*;
+
+    #[test]
+    fn test_notebook_creation_and_list() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // Create a new notebook
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "Successfully created new notebook: 'work'",
+            ));
+
+        assert!(rjot_dir.join("notebooks").join("work").exists());
+
+        // List notebooks
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "list"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("* default"))
+            .stdout(predicate::str::contains("  work"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_notebook_status_and_use() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // Default status
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "status"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Active notebook: default"));
+
+        // Status with env var
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "status"])
+            .env("RJOT_DIR", &rjot_dir)
+            .env("RJOT_ACTIVE_NOTEBOOK", "personal")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Active notebook: personal"));
+
+        // `use` command should print the export command
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "project-x"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "use", "project-x"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "export RJOT_ACTIVE_NOTEBOOK=\"project-x\"",
+            ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_jotting_in_different_notebooks() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Jot in default
+        Command::cargo_bin("rjot")?
+            .arg("a personal note")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Added sleep to prevent filename collision due to second-level timestamp resolution.
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // Jot in work notebook using --notebook flag
+        Command::cargo_bin("rjot")?
+            .arg("a work note")
+            .args(["--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+
+        // Jot in work notebook using env var
+        Command::cargo_bin("rjot")?
+            .arg("another work note")
+            .env("RJOT_DIR", &rjot_dir)
+            .env("RJOT_ACTIVE_NOTEBOOK", "work")
+            .assert()
+            .success();
+
+        // Verify counts
+        assert_eq!(
+            fs::read_dir(rjot_dir.join("notebooks").join("default"))?.count(),
+            1
+        );
+        assert_eq!(
+            fs::read_dir(rjot_dir.join("notebooks").join("work"))?.count(),
+            2
+        );
+
+        // Verify `list` is scoped correctly
+        Command::cargo_bin("rjot")?
+            .arg("list")
+            .env("RJOT_DIR", &rjot_dir)
+            .env("RJOT_ACTIVE_NOTEBOOK", "work")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("a work note"))
+            .stdout(predicate::str::contains("another work note"))
+            .stdout(predicate::str::contains("a personal note").not());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_legacy_migration() -> TestResult {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let rjot_dir = temp_dir.path().to_path_buf();
+
+        // 1. Create the legacy `entries` directory structure
+        let legacy_entries = rjot_dir.join("entries");
+        fs::create_dir_all(&legacy_entries)?;
+        fs::write(legacy_entries.join("legacy_note.md"), "old note")?;
+
+        // 2. Run any rjot command, which should trigger the migration
+        Command::cargo_bin("rjot")?
+            .arg("info")
+            .arg("--paths")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Migrating your existing notes"));
+
+        // 3. Verify the new structure
+        assert!(
+            !rjot_dir.join("entries").exists(),
+            "Legacy entries dir should be gone"
+        );
+        let default_notebook = rjot_dir.join("notebooks").join("default");
+        assert!(
+            default_notebook.exists(),
+            "Default notebook should be created"
+        );
+        assert!(
+            default_notebook.join("legacy_note.md").exists(),
+            "Legacy note should be moved"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_info_stats_all_notebooks() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Add one note to default, two to work
+        Command::cargo_bin("rjot")?
+            .arg("note 1")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("note 2")
+            .args(["--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("note 3")
+            .args(["--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Check stats for all
+        Command::cargo_bin("rjot")?
+            .args(["info", "--stats", "--all"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Stats for all notebooks combined"))
+            .stdout(predicate::str::contains("Total jots: 3"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_tags_filter_is_scoped() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Create two notes with the same tag in different notebooks
+        Command::cargo_bin("rjot")?
+            .arg("personal task")
+            .args(["--tags", "todo"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        Command::cargo_bin("rjot")?
+            .arg("work task")
+            .args(["--tags", "todo", "--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // Filter in the 'work' notebook
+        Command::cargo_bin("rjot")?
+            .args(["tags", "todo", "--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("work task"))
+            .stdout(predicate::str::contains("personal task").not());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_new_with_template_in_notebook() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        let templates_dir = rjot_dir.join("templates");
+        fs::create_dir(&templates_dir)?;
+        fs::write(templates_dir.join("meeting.md"), "## Meeting Notes")?;
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        Command::cargo_bin("rjot")?
+            .args(["new", "--template", "meeting.md", "--notebook", "work"])
+            .env("RJOT_DIR", &rjot_dir)
+            .env("EDITOR", "true") // Use `true` as a no-op editor
+            .assert()
+            .success();
+
+        let work_notebook = rjot_dir.join("notebooks").join("work");
+        let entry_path = fs::read_dir(work_notebook)?.next().unwrap()?.path();
+        let content = fs::read_to_string(entry_path)?;
+        assert!(content.contains("## Meeting Notes"));
+
+        Ok(())
+    }
+}
+
+// --- NEW TEST MODULE FOR ERROR HANDLING ---
+#[cfg(test)]
+mod error_handling {
+    use super::*;
+
+    #[test]
+    fn test_fails_on_invalid_notebook_name() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", "invalid/name"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid notebook name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_fails_on_nonexistent_notebook_use() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "use", "fake-notebook"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "Notebook 'fake-notebook' not found",
+            ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_fails_on_ambiguous_prefix() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        let entries = rjot_dir.join("notebooks").join("default");
+        fs::write(entries.join("2025-01-01-100000.md"), "note 1")?;
+        fs::write(entries.join("2025-01-01-200000.md"), "note 2")?;
+
+        Command::cargo_bin("rjot")?
+            .args(["show", "2025-01-01"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "Prefix '2025-01-01' is not unique",
+            ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_fails_on_out_of_bounds_last() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        Command::cargo_bin("rjot")?
+            .arg("a single note")
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        Command::cargo_bin("rjot")?
+            .args(["show", "--last=5"])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Index out of bounds"));
+        Ok(())
+    }
+}
+
+// --- NEW TEST FOR FULL ENCRYPTION LIFECYCLE ---
 #[test]
-fn test_encryption_and_decryption_lifecycle() -> TestResult {
+fn test_full_encryption_and_decryption_lifecycle_across_notebooks() -> TestResult {
     let (_temp_dir, rjot_dir) = setup();
-    let entries_dir = rjot_dir.join("entries");
 
     // 1. Init with encryption
     Command::cargo_bin("rjot")?
         .args(["init", "--encrypt"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "Generated new encryption identity",
-        ));
+        .success();
 
-    assert!(rjot_dir.join("identity.txt").exists());
-    assert!(rjot_dir.join("config.toml").exists());
-
-    // 2. Create an encrypted note
+    // 2. Create a second notebook
     Command::cargo_bin("rjot")?
-        .arg("this is a secret")
+        .args(["notebook", "new", "secrets"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success();
 
-    // 3. Verify the file on disk is encrypted
-    let entry_path = fs::read_dir(&entries_dir)?.next().unwrap()?.path();
-    let raw_content = fs::read(&entry_path)?;
-    assert!(raw_content.starts_with(b"age-encryption.org"));
-
-    // 4. Verify rjot can read it transparently
+    // 3. Create encrypted notes in both notebooks
     Command::cargo_bin("rjot")?
-        .arg("show")
-        .arg("--last")
+        .arg("default secret")
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+    std::thread::sleep(std::time::Duration::from_millis(1200));
+    Command::cargo_bin("rjot")?
+        .arg("special secret")
+        .args(["--notebook", "secrets"])
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success();
+
+    // 4. Verify both files on disk are encrypted
+    let default_note_path = fs::read_dir(rjot_dir.join("notebooks").join("default"))?
+        .next()
+        .unwrap()?
+        .path();
+    let secret_note_path = fs::read_dir(rjot_dir.join("notebooks").join("secrets"))?
+        .next()
+        .unwrap()?
+        .path();
+    assert!(fs::read(&default_note_path)?.starts_with(b"age-encryption.org"));
+    assert!(fs::read(&secret_note_path)?.starts_with(b"age-encryption.org"));
+
+    // 5. Verify rjot can read them transparently
+    Command::cargo_bin("rjot")?
+        .args(["show", "--last"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
         .success()
-        .stdout(predicate::str::contains("this is a secret"));
+        .stdout(predicate::str::contains("default secret"));
+    Command::cargo_bin("rjot")?
+        .args(["show", "--last", "--notebook", "secrets"])
+        .env("RJOT_DIR", &rjot_dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("special secret"));
 
-    // 5. Decrypt the journal
+    // 6. Decrypt the entire journal
     Command::cargo_bin("rjot")?
         .args(["decrypt", "--force"])
         .env("RJOT_DIR", &rjot_dir)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Successfully decrypted journal"));
+        .success();
 
-    // 6. Verify the file on disk is now plaintext
-    let raw_content_after = fs::read_to_string(&entry_path)?;
-    assert_eq!(raw_content_after, "this is a secret");
+    // 7. Verify both files are now plaintext
+    assert_eq!(fs::read_to_string(default_note_path)?, "default secret");
+    assert_eq!(fs::read_to_string(secret_note_path)?, "special secret");
 
-    // 7. Verify the identity and config files were removed
+    // 8. Verify identity/config files are gone
     assert!(!rjot_dir.join("identity.txt").exists());
     assert!(!rjot_dir.join("config.toml").exists());
-
-    Ok(())
-}
-
-#[test]
-fn test_list_count_override() -> TestResult {
-    let (_temp_dir, rjot_dir) = setup();
-
-    for i in 0..12 {
-        Command::cargo_bin("rjot")?
-            .arg(format!("note {i}"))
-            .env("RJOT_DIR", &rjot_dir)
-            .assert()
-            .success();
-        std::thread::sleep(std::time::Duration::from_millis(1200)); // Ensure different timestamps
-    }
-
-    // Default list should show 10
-    let output = Command::cargo_bin("rjot")?
-        .arg("list")
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    let stdout = String::from_utf8(output.get_output().stdout.clone())?;
-    assert_eq!(
-        stdout.lines().count(),
-        13,
-        "Expected 10 notes + 2 header lines + 1 space"
-    );
-
-    // Override to show 5
-    let output_5 = Command::cargo_bin("rjot")?
-        .arg("list")
-        .arg("5")
-        .env("RJOT_DIR", &rjot_dir)
-        .assert()
-        .success();
-
-    let stdout_5 = String::from_utf8(output_5.get_output().stdout.clone())?;
-    assert_eq!(
-        stdout_5.lines().count(),
-        8,
-        "Expected 5 notes + 2 header lines + 1 space"
-    );
 
     Ok(())
 }

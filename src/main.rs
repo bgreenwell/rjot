@@ -19,7 +19,12 @@ use cli::Commands;
 /// and dispatches to the appropriate command handler based on user input.
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
-    let entries_dir = helpers::get_entries_dir()?;
+
+    // The active notebook's entries directory is now resolved once here.
+    // It intelligently uses the --notebook flag, the RJOT_ACTIVE_NOTEBOOK env var,
+    // or falls back to "default". This resolved path is then passed to all
+    // commands, making them instantly notebook-aware.
+    let entries_dir = helpers::get_active_entries_dir(cli.notebook)?;
 
     // Match on the subcommand provided by the user.
     match cli.command {
@@ -54,14 +59,17 @@ fn main() -> Result<()> {
             }
             Commands::Info(args) => commands::command_info(&entries_dir, args)?,
             Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
+            Commands::Notebook(args) => commands::command_notebook(args)?,
             Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
             Commands::Sync => commands::command_sync()?,
-            Commands::Decrypt { force } => commands::command_decrypt(&entries_dir, force)?,
+            // The `decrypt` command is now global and no longer takes `entries_dir`.
+            Commands::Decrypt { force } => commands::command_decrypt(force)?,
         },
         // If no subcommand is given, this is the default action.
         None => {
             if !cli.message.is_empty() {
                 let message = cli.message.join(" ");
+                // The default jot action also correctly uses the resolved `entries_dir`.
                 commands::command_down(&entries_dir, &message, cli.tags)?;
             } else {
                 // If no subcommand and no message, show a brief help message.

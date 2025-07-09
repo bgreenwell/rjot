@@ -24,11 +24,97 @@ use {
     std::{borrow::Cow, sync::Arc},
 };
 
-use crate::cli::{InfoArgs, TagAction, TagArgs};
+use crate::cli::{InfoArgs, NotebookAction, NotebookArgs, TagAction, TagArgs};
 use crate::helpers::{
-    self, display_note_list, get_note_path_for_action, get_rjot_dir_root, get_templates_dir,
-    parse_note_from_file, Frontmatter,
+    self, display_note_list, get_note_path_for_action, get_notebooks_dir, get_rjot_dir_root,
+    get_templates_dir, parse_note_from_file, Frontmatter,
 };
+
+// --- Notebook Commands ---
+
+/// Handles all notebook-related subcommands.
+pub fn command_notebook(args: NotebookArgs) -> Result<()> {
+    match args.action {
+        NotebookAction::New { name } => command_notebook_new(&name)?,
+        NotebookAction::List => command_notebook_list()?,
+        NotebookAction::Use { name } => command_notebook_use(&name)?,
+        NotebookAction::Status => command_notebook_status()?,
+    }
+    Ok(())
+}
+
+/// Creates a new notebook directory.
+fn command_notebook_new(name: &str) -> Result<()> {
+    // Basic sanitization to prevent directory traversal or invalid names.
+    if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+        bail!(
+            "Invalid notebook name: '{}'. Names cannot contain slashes or be dots.",
+            name
+        );
+    }
+
+    let notebooks_dir = get_notebooks_dir()?;
+    let new_notebook_path = notebooks_dir.join(name);
+
+    if new_notebook_path.exists() {
+        println!("Notebook '{name}' already exists.");
+    } else {
+        fs::create_dir_all(&new_notebook_path)?;
+        println!("Successfully created new notebook: '{name}'.");
+    }
+    Ok(())
+}
+
+/// Lists all available notebooks.
+fn command_notebook_list() -> Result<()> {
+    let notebooks_dir = get_notebooks_dir()?;
+    let active_notebook =
+        env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
+
+    println!("Available notebooks (* indicates active):");
+
+    for entry in fs::read_dir(notebooks_dir)?.filter_map(Result::ok) {
+        if entry.path().is_dir() {
+            let notebook_name = entry.file_name().to_string_lossy().to_string();
+            let prefix = if notebook_name == active_notebook {
+                "*"
+            } else {
+                " "
+            };
+            println!("  {prefix} {notebook_name}");
+        }
+    }
+    Ok(())
+}
+
+/// Prints the shell command to switch the active notebook.
+fn command_notebook_use(name: &str) -> Result<()> {
+    let notebooks_dir = get_notebooks_dir()?;
+    let target_notebook = notebooks_dir.join(name);
+
+    if !target_notebook.exists() || !target_notebook.is_dir() {
+        bail!(
+            "Notebook '{}' not found. Create it with `rjot notebook new {}`.",
+            name,
+            name
+        );
+    }
+
+    // This command prints the shell command for the user to evaluate.
+    // It cannot modify the parent shell's environment directly.
+    println!("export RJOT_ACTIVE_NOTEBOOK=\"{name}\"");
+    Ok(())
+}
+
+/// Shows the currently active notebook.
+fn command_notebook_status() -> Result<()> {
+    let active_notebook =
+        env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
+    println!("Active notebook: {active_notebook}");
+    Ok(())
+}
+
+// --- Other Commands (Modified where necessary) ---
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
@@ -43,6 +129,7 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
                 if !repo.is_empty()? {
                     println!("Git repository is not empty. Assuming it is already set up.");
                 } else if !gitignore_path.exists() {
+                    // Correctly ignore only sensitive files. Notebooks should be tracked.
                     fs::write(&gitignore_path, "identity.txt\nconfig.toml\n")?;
                     println!("Created .gitignore to exclude sensitive files.");
 
@@ -92,17 +179,20 @@ pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
     Ok(())
 }
 
-/// Permanently decrypts all notes in the journal.
-pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
+/// Permanently decrypts all notes in ALL notebooks. It no longer takes
+/// an `entries_dir` argument as it operates globally.
+pub fn command_decrypt(force: bool) -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
+    let notebooks_dir = get_notebooks_dir()?;
     let identity_path = root_dir.join("identity.txt");
+
     if !identity_path.exists() {
         println!("Journal is not encrypted (no identity.txt found). Nothing to do.");
         return Ok(());
     }
 
     if !force {
-        print!("This will permanently decrypt all notes and remove your identity file. This action cannot be undone. Continue? [y/N] ");
+        print!("This will permanently decrypt all notes in ALL notebooks and remove your identity file. This action cannot be undone. Continue? [y/N] ");
         io::stdout().flush()?;
         let mut confirmation = String::new();
         io::stdin().read_line(&mut confirmation)?;
@@ -119,27 +209,36 @@ pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
         .map_err(|e| anyhow!(e))?;
     let identities: Vec<Box<dyn Identity>> = vec![Box::new(identity)];
 
-    println!("Starting decryption of all notes...");
-    for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
-        let path = entry.path();
-        if path.is_file() {
-            let file_bytes = fs::read(&path)?;
-            if !file_bytes.starts_with(b"age-encryption.org") {
-                println!(
-                    "Skipping non-encrypted file: {:?}",
-                    path.file_name().unwrap()
-                );
-                continue;
-            }
+    println!("Starting decryption of all notes in all notebooks...");
+    for notebook_entry in fs::read_dir(notebooks_dir)?.filter_map(Result::ok) {
+        if notebook_entry.path().is_dir() {
+            let entries_dir = notebook_entry.path();
+            println!(
+                "\nDecrypting notebook: {:?}",
+                entries_dir.file_name().unwrap()
+            );
+            for entry in fs::read_dir(entries_dir)?.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.is_file() {
+                    let file_bytes = fs::read(&path)?;
+                    if !file_bytes.starts_with(b"age-encryption.org") {
+                        println!(
+                            "  Skipping non-encrypted file: {:?}",
+                            path.file_name().unwrap()
+                        );
+                        continue;
+                    }
 
-            let decryptor = Decryptor::new(&file_bytes as &[u8])?;
-            if let Decryptor::Recipients(reader) = decryptor {
-                let mut decrypted_bytes = vec![];
-                reader
-                    .decrypt(identities.iter().map(|i| i.as_ref()))?
-                    .read_to_end(&mut decrypted_bytes)?;
-                fs::write(&path, decrypted_bytes)?;
-                println!("Decrypted {:?}", path.file_name().unwrap());
+                    let decryptor = Decryptor::new(&file_bytes as &[u8])?;
+                    if let Decryptor::Recipients(reader) = decryptor {
+                        let mut decrypted_bytes = vec![];
+                        reader
+                            .decrypt(identities.iter().map(|i| i.as_ref()))?
+                            .read_to_end(&mut decrypted_bytes)?;
+                        fs::write(&path, decrypted_bytes)?;
+                        println!("  - Decrypted {:?}", path.file_name().unwrap());
+                    }
+                }
             }
         }
     }
@@ -154,6 +253,8 @@ pub fn command_decrypt(entries_dir: &PathBuf, force: bool) -> Result<()> {
 }
 
 /// Commits and pushes all changes in the rjot Git repository to the `origin` remote.
+/// This command requires no changes, as it operates on the root git repo which now
+/// contains the `notebooks` directory.
 pub fn command_sync() -> Result<()> {
     let root_dir = get_rjot_dir_root()?;
     let repo = Repository::open(&root_dir).map_err(|_| {
@@ -255,6 +356,7 @@ pub fn command_sync() -> Result<()> {
 }
 
 /// Creates a new jot instantly from command-line arguments.
+/// No changes needed, as it receives the correct `entries_dir`.
 pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>) -> Result<()> {
     let mut content = String::new();
     if let Some(tags) = tags {
@@ -277,6 +379,7 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
 }
 
 /// Creates a new jot by opening the default editor.
+/// No changes needed.
 pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
     let editor = helpers::get_editor()?;
     let now = Local::now();
@@ -306,6 +409,7 @@ pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<
 }
 
 /// Opens an existing jot in the default editor.
+/// No changes needed.
 pub fn command_edit(note_path: PathBuf) -> Result<()> {
     let editor = helpers::get_editor()?;
     println!(
@@ -322,6 +426,7 @@ pub fn command_edit(note_path: PathBuf) -> Result<()> {
 }
 
 /// Manages tags on an existing jot.
+/// No changes needed.
 pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
     let (id_prefix, last) = match &args.action {
         TagAction::Add {
@@ -363,6 +468,7 @@ pub fn command_tag(entries_dir: &Path, args: TagArgs) -> Result<()> {
 }
 
 /// Lists the most recent jots.
+/// No changes needed.
 pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
     let num_to_list = count.unwrap_or(10);
     let entries = fs::read_dir(entries_dir)?;
@@ -377,10 +483,7 @@ pub fn command_list(entries_dir: &PathBuf, count: Option<usize>) -> Result<()> {
 }
 
 /// Interactively selects a jot using a fuzzy finder.
-///
-/// This command provides a fast and intuitive way for users to find a specific
-/// note without needing to remember its exact ID or title. It displays an
-/// interactive list in the terminal that can be filtered in real-time.
+/// No changes needed.
 #[cfg(not(windows))]
 pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     // This struct and its implementation are now inside the conditional block
@@ -416,9 +519,7 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     type SkimChannel = (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>);
 
     let (tx, rx): SkimChannel = unbounded();
-    //let (tx, rx): (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>) = unbounded();
 
-    // Create and send custom NoteItem objects instead of plain strings
     for note in notes {
         let display_text = format!(
             "{} | {}",
@@ -429,22 +530,14 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
             id: note.id,
             display_text,
         };
-        // The `tx` channel now sends our custom item
         let _ = tx.send(Arc::new(item));
     }
     drop(tx);
 
-    // Skim::run_with will now use our custom `output()` method.
-    // The library itself handles printing the output of the selected item.
-    // We no longer need to process the results ourselves and print the ID.
     let skim_output = Skim::run_with(&options, Some(rx));
 
-    // If the user hits Esc, skim_output will be None.
-    // If they select an item, skim handles printing the output from our
-    // custom `NoteItem::output` method.
     if let Some(output) = skim_output {
         if output.is_abort {
-            // User aborted (e.g., pressed Esc), so we do nothing.
             return Ok(());
         }
     }
@@ -453,6 +546,7 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
 }
 
 /// Performs a full-text search of all jots.
+/// No changes needed.
 pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
     println!("Searching for \"{query}\" in your jots...");
     let entries = fs::read_dir(entries_dir)?;
@@ -468,6 +562,7 @@ pub fn command_find(entries_dir: &PathBuf, query: &str) -> Result<()> {
 }
 
 /// Filters jots by one or more tags.
+/// No changes needed.
 pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()> {
     println!("Filtering by tags: {tags:?}");
     let entries = fs::read_dir(entries_dir)?;
@@ -483,6 +578,7 @@ pub fn command_tags_filter(entries_dir: &PathBuf, tags: &[String]) -> Result<()>
 }
 
 /// A helper function for all date-based filtering.
+/// No changes needed.
 pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: bool) -> Result<()> {
     let date_prefix = date.format("%Y-%m-%d").to_string();
     println!("Finding jots from {date_prefix}...");
@@ -506,17 +602,20 @@ pub fn command_by_date_filter(entries_dir: &PathBuf, date: NaiveDate, compile: b
 }
 
 /// Lists jots created today.
+/// No changes needed.
 pub fn command_today(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     command_by_date_filter(entries_dir, Local::now().date_naive(), compile)
 }
 
 /// Lists jots created yesterday.
+/// No changes needed.
 pub fn command_yesterday(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     let yesterday = Local::now().date_naive() - chrono::Duration::days(1);
     command_by_date_filter(entries_dir, yesterday, compile)
 }
 
 /// Lists jots created in the current week.
+/// No changes needed.
 pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
     let today = Local::now().date_naive();
     let week_start = today - chrono::Duration::days(today.weekday().num_days_from_sunday() as i64);
@@ -540,6 +639,7 @@ pub fn command_by_week(entries_dir: &PathBuf, compile: bool) -> Result<()> {
 }
 
 /// Lists jots from a specific date or date range.
+/// No changes needed.
 pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Result<()> {
     let mut matches = Vec::new();
     if let Some((start_str, end_str)) = date_spec.split_once("..") {
@@ -568,6 +668,7 @@ pub fn command_on(entries_dir: &PathBuf, date_spec: &str, compile: bool) -> Resu
 }
 
 /// Displays the full content of a specific jot.
+/// No changes needed.
 pub fn command_show(note_path: PathBuf) -> Result<()> {
     let content = helpers::read_note_file(&note_path)?;
     println!("{content}");
@@ -575,6 +676,7 @@ pub fn command_show(note_path: PathBuf) -> Result<()> {
 }
 
 /// Deletes a specific jot with user confirmation.
+/// No changes needed.
 pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
     let filename = note_path.file_name().unwrap().to_string_lossy();
     if !force {
@@ -593,6 +695,7 @@ pub fn command_delete(note_path: PathBuf, force: bool) -> Result<()> {
 }
 
 /// Displays information and statistics about the journal.
+/// This command is notebook-aware.
 pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     if !args.paths && !args.stats {
         println!(
@@ -603,32 +706,75 @@ pub fn command_info(entries_dir: &PathBuf, args: InfoArgs) -> Result<()> {
     }
     if args.paths {
         println!("--- rjot paths ---");
-        println!("Root Directory:  {:?}", helpers::get_rjot_dir_root()?);
-        println!("Entries:         {entries_dir:?}");
-        println!("Templates:       {:?}", helpers::get_templates_dir()?);
+        let active_notebook =
+            env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
+        println!("Root Directory:   {:?}", helpers::get_rjot_dir_root()?);
+        println!("Notebooks Root:   {:?}", helpers::get_notebooks_dir()?);
+        println!("Active Notebook:  {active_notebook}");
+        println!("Entries:          {entries_dir:?}");
+        println!("Templates:        {:?}", helpers::get_templates_dir()?);
     }
     if args.stats {
         println!("\n--- rjot stats ---");
-        let entries = fs::read_dir(entries_dir)?;
-        let mut note_count = 0;
-        let mut tag_counts: HashMap<String, usize> = HashMap::new();
-        for entry in entries.filter_map(Result::ok) {
+
+        if args.all {
+            // Stats for all notebooks
+            let notebooks_dir = get_notebooks_dir()?;
+            let mut total_notes = 0;
+            let mut all_tags: HashMap<String, usize> = HashMap::new();
+
+            for entry in fs::read_dir(notebooks_dir)?.filter_map(Result::ok) {
+                if entry.path().is_dir() {
+                    let notebook_path = entry.path();
+                    let (note_count, tag_counts) = calculate_stats_for_dir(&notebook_path)?;
+                    total_notes += note_count;
+                    for (tag, count) in tag_counts {
+                        *all_tags.entry(tag).or_insert(0) += count;
+                    }
+                }
+            }
+            println!("Stats for all notebooks combined:");
+            print_stats(total_notes, all_tags);
+        } else {
+            // Stats for the active notebook only
+            let active_notebook_name = entries_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("default");
+            println!("Stats for active notebook: '{active_notebook_name}'");
+            let (note_count, tag_counts) = calculate_stats_for_dir(entries_dir)?;
+            print_stats(note_count, tag_counts);
+        }
+    }
+    Ok(())
+}
+
+/// Helper function to calculate stats for a given directory.
+fn calculate_stats_for_dir(dir: &Path) -> Result<(usize, HashMap<String, usize>)> {
+    let mut note_count = 0;
+    let mut tag_counts: HashMap<String, usize> = HashMap::new();
+    for entry in fs::read_dir(dir)?.filter_map(Result::ok) {
+        if entry.path().is_file() {
             note_count += 1;
             let note = parse_note_from_file(&entry.path())?;
             for tag in note.frontmatter.tags {
                 *tag_counts.entry(tag).or_insert(0) += 1;
             }
         }
-        println!("Total jots: {note_count}");
-        if !tag_counts.is_empty() {
-            let mut sorted_tags: Vec<_> = tag_counts.into_iter().collect();
-            sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
-            sorted_tags.truncate(5);
-            println!("\nMost common tags:");
-            for (tag, count) in sorted_tags {
-                println!("  - {tag} ({count})");
-            }
+    }
+    Ok((note_count, tag_counts))
+}
+
+/// Helper function to print formatted stats.
+fn print_stats(note_count: usize, tag_counts: HashMap<String, usize>) {
+    println!("Total jots: {note_count}");
+    if !tag_counts.is_empty() {
+        let mut sorted_tags: Vec<_> = tag_counts.into_iter().collect();
+        sorted_tags.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_tags.truncate(5);
+        println!("\nMost common tags:");
+        for (tag, count) in sorted_tags {
+            println!("  - {tag} ({count})");
         }
     }
-    Ok(())
 }
