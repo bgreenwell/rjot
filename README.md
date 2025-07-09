@@ -216,12 +216,27 @@ Pinning is a great way to keep important notes from getting buried in your timel
 
 **1. Pin a note:**
 You can target a note by its ID or by its recency.
+
 ```sh
 # Pin a specific jot
 ❯ rjot pin 2025-07-09-105000
 
 # Pin the last jot you created
 ❯ rjot pin --last
+```
+
+**2. View all pinned notes:**
+Use the `--pinned` flag with the `list` command.
+
+```sh
+❯ rjot list --pinned
+```
+
+**3. Unpin a note:**
+When a note is no longer critical, you can unpin it.
+
+```sh
+❯ rjot unpin 2025-07-09-105000
 ```
 
 ### Managing tags
