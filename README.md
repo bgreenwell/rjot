@@ -301,15 +301,19 @@ The `decrypt` command will permanently decrypt all notes in all notebooks.
 
 ## Configuration
 
-`rjot` respects platform conventions for file storage and the `$RJOT_DIR` environment variable. Your notes are stored in `notebooks/` inside the `rjot` root directory.
+### File storage location
 
-## Roadmap
+`rjot` respects platform conventions and the `$RJOT_DIR` environment variable for all its data. By default, your journal is stored in the following locations:
 
-`rjot` is under active development. The next major step is to implement the "power features":
+* **macOS:** `~/Users/<YourUsername>/Library/Application Support/rjot/`
+* **Linux:** `~/.config/rjot/`
+* **Windows:** `C:\Users\<YourUsername>\AppData\Roaming\rjot\`
 
-  * [x] **Git integration**
-  * [x] **Encryption**
-  * [ ] **Reminders**: `rjot remind` to set system-level notifications.
+Within that root directory, your notes are organized in the `notebooks/` subdirectory.
+
+### Templates
+
+You can create custom templates for new notes by placing Markdown files in the `templates/` subdirectory inside your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable, `{{date}}`, which will be replaced with the current timestamp when the note is created.
 
 ## Contributing
 
