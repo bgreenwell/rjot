@@ -1125,8 +1125,10 @@ mod import_export {
 
         // 3. ✅ REMOVE the original notebook to simulate a restore
         fs::remove_dir_all(&notebook_path)?;
-        assert!(!notebook_path.exists(), "Original notebook should be deleted before import");
-
+        assert!(
+            !notebook_path.exists(),
+            "Original notebook should be deleted before import"
+        );
 
         // 4. Import the notebook from the json file. This should now succeed.
         Command::cargo_bin("rjot")?
