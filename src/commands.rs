@@ -381,13 +381,13 @@ pub fn command_down(entries_dir: &Path, message: &str, tags: Option<Vec<String>>
 
 /// Creates a new jot formatted as a Markdown task.
 pub fn command_task(entries_dir: &Path, message: &str) -> Result<()> {
-    let task_content = format!("- [ ] {}", message);
-    println!("Jotting down task: \"{}\"", message);
+    let task_content = format!("- [ ] {message}");
+    println!("Jotting down task: \"{message}\"");
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
     helpers::write_note_file(&file_path, &task_content)?;
-    println!("Successfully saved to {:?}", file_path);
+    println!("Successfully saved to {file_path:?}");
     Ok(())
 }
 
