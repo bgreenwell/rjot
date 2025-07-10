@@ -142,20 +142,6 @@ You can use the global `--notebook` flag to perform a single action in another n
 ❯ rjot 'Remember to buy milk' --notebook personal
 ```
 
-Excellent\! That's great news. It means the global search feature is fully implemented and correct.
-
-The final step is to update the project's documentation to reflect this new capability. Here are the suggested changes for your `CHANGELOG.md` and `README.md` files.
-
------
-
-### `CHANGELOG.md`
-
-Here is a new bullet point to add under the `### Added` section in your changelog.
-
-```markdown
-* **Global Search**: The `find` command now includes an `--all` flag to search for keywords across every note in every notebook, with an updated output format to show which notebook a result belongs to.
-```
-
 ### Viewing and filtering notes
 
 All viewing and filtering commands are scoped to the active notebook unless otherwise specified.
@@ -303,6 +289,34 @@ Use the `tag` subcommand to modify tags on an existing note in the active notebo
 ```sh
 # Replace all tags on the 2nd to last jot with 'archived'
 ❯ rjot tag set --last=2 archived
+```
+
+### Importing and exporting notebooks
+
+`rjot` allows you to export entire notebooks for backups, sharing, or migration. You can import these notebooks on another machine or into another `rjot` instance.
+
+**1. Export a notebook:**
+
+You can export to a `.zip` archive or a consolidated `.json` file.
+
+```sh
+# Export the 'work' notebook into a zip file
+rjot export work --output ./work_backup.zip
+
+# Export the 'personal' notebook into a JSON file
+rjot export personal --format json --output ./personal_backup.json
+```
+
+**2. Import a notebook:**
+
+`rjot` will automatically detect the file type and create a new notebook.
+
+```bash
+# Import from a zip file. This will create a new notebook named 'work_backup'.
+rjot import ./work_backup.zip
+
+# Import from a json file. This will create a new notebook named 'personal'.
+rjot import ./personal_backup.json
 ```
 
 ### Utility commands
