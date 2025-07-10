@@ -1033,3 +1033,113 @@ mod tasks {
         Ok(())
     }
 }
+
+/// Test module for import/export feature
+#[cfg(test)]
+mod import_export {
+    use super::*;
+
+    #[test]
+    fn test_export_and_import_zip() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        let notebook_name = "zip-test-notebook";
+        let output_zip = rjot_dir.join("export.zip");
+
+        // 1. Create a notebook and a note
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", notebook_name])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        Command::cargo_bin("rjot")?
+            .arg("a note for zip export")
+            .args(["--notebook", notebook_name])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 2. Export the notebook to a zip file
+        Command::cargo_bin("rjot")?
+            .args([
+                "export",
+                notebook_name,
+                "--output",
+                output_zip.to_str().unwrap(),
+            ])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        assert!(output_zip.exists());
+
+        // 3. Import the notebook from the zip file
+        Command::cargo_bin("rjot")?
+            .args(["import", output_zip.to_str().unwrap()])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 4. Verify the imported notebook and its content
+        let imported_notebook_path = rjot_dir.join("notebooks").join("export"); // "export" from file stem
+        assert!(imported_notebook_path.exists());
+        assert_eq!(fs::read_dir(&imported_notebook_path)?.count(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_export_and_import_json() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        let notebook_name = "json-test-notebook";
+        let notebook_path = rjot_dir.join("notebooks").join(notebook_name); // Path to the original notebook
+        let output_json = rjot_dir.join("export.json");
+
+        // 1. Create a notebook and a note
+        Command::cargo_bin("rjot")?
+            .args(["notebook", "new", notebook_name])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+        Command::cargo_bin("rjot")?
+            .arg("a note for json export")
+            .args(["--notebook", notebook_name])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 2. Export the notebook to a json file
+        Command::cargo_bin("rjot")?
+            .args([
+                "export",
+                notebook_name,
+                "--format",
+                "json",
+                "--output",
+                output_json.to_str().unwrap(),
+            ])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        assert!(output_json.exists());
+
+        // 3. ✅ REMOVE the original notebook to simulate a restore
+        fs::remove_dir_all(&notebook_path)?;
+        assert!(!notebook_path.exists(), "Original notebook should be deleted before import");
+
+
+        // 4. Import the notebook from the json file. This should now succeed.
+        Command::cargo_bin("rjot")?
+            .args(["import", output_json.to_str().unwrap()])
+            .env("RJOT_DIR", &rjot_dir)
+            .assert()
+            .success();
+
+        // 5. Verify the imported notebook
+        let imported_notebook_path = rjot_dir.join("notebooks").join(notebook_name);
+        assert!(imported_notebook_path.exists());
+        assert_eq!(fs::read_dir(&imported_notebook_path)?.count(), 1);
+
+        Ok(())
+    }
+}

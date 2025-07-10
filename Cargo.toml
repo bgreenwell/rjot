@@ -20,9 +20,11 @@ dirs = "5.0.1"
 git2 = "0.18"
 rpassword = "7.3"
 serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0"
 serde_yaml = "0.9.34"
 which = "4.4.2"
 toml = "0.8"
+zip = { version = "2.1", features = ["zstd"] }
 
 # Non-Windows dependencies
 [target.'cfg(not(windows))'.dependencies]

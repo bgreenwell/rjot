@@ -73,8 +73,9 @@ fn main() -> Result<()> {
             Commands::Notebook(args) => commands::command_notebook(args)?,
             Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
             Commands::Sync => commands::command_sync()?,
-            // The `decrypt` command is now global and no longer takes `entries_dir`.
             Commands::Decrypt { force } => commands::command_decrypt(force)?,
+            Commands::Export(args) => commands::command_export(args)?,
+            Commands::Import(args) => commands::command_import(args)?,
         },
         // If no subcommand is given, this is the default action.
         None => {

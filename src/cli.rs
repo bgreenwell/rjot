@@ -4,6 +4,8 @@
 //! structure from Rust structs and enums. This includes all subcommands, arguments,
 //! and their help messages.
 
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand};
 
 /// The main CLI structure, representing the `rjot` command itself.
@@ -174,6 +176,11 @@ pub enum Commands {
         #[arg(long, short)]
         force: bool,
     },
+    /// Export a notebook to a ZIP archive or a JSON file.
+    Export(ExportArgs),
+
+    /// Import a notebook from a ZIP archive or a JSON file.
+    Import(ImportArgs),
 }
 
 /// Arguments for the `notebook` subcommand.
@@ -270,4 +277,28 @@ pub enum TagAction {
         #[arg(required = true, value_delimiter = ',')]
         tags: Vec<String>,
     },
+}
+
+/// Arguments for the `export` subcommand.
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    /// The name of the notebook to export.
+    #[arg(required = true)]
+    pub notebook_name: String,
+
+    /// The format for the export (zip or json).
+    #[arg(long, short, default_value = "zip")]
+    pub format: String,
+
+    /// The path for the output file.
+    #[arg(long, short, required = true)]
+    pub output: PathBuf,
+}
+
+/// Arguments for the `import` subcommand.
+#[derive(Args, Debug)]
+pub struct ImportArgs {
+    /// The path to the file to import.
+    #[arg(required = true)]
+    pub file_path: PathBuf,
 }

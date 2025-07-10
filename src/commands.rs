@@ -15,6 +15,10 @@ use age::{secrecy::ExposeSecret, x25519, Decryptor, Identity};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use zip::write::{FileOptions, ZipWriter};
+use zip::ZipArchive;
 
 // Conditionally compile everything related to skim
 #[cfg(not(windows))]
@@ -24,11 +28,25 @@ use {
     std::{borrow::Cow, sync::Arc},
 };
 
-use crate::cli::{InfoArgs, NotebookAction, NotebookArgs, TagAction, TagArgs};
+use crate::cli::{
+    ExportArgs, ImportArgs, InfoArgs, NotebookAction, NotebookArgs, TagAction, TagArgs,
+};
 use crate::helpers::{
     self, display_note_list, get_note_path_for_action, get_notebooks_dir, get_rjot_dir_root,
     get_templates_dir, parse_note_from_file, Frontmatter, TaskStats,
 };
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonExport {
+    notebook_name: String,
+    jots: Vec<JsonJot>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonJot {
+    filename: String,
+    content: String,
+}
 
 // --- Notebook Commands ---
 
@@ -915,4 +933,137 @@ fn print_stats(note_count: usize, tag_counts: HashMap<String, usize>, task_stats
         println!("  - Completed: {}", task_stats.completed);
         println!("  - Pending:   {}", task_stats.pending);
     }
+}
+
+/// Exports a notebook to a specified file format.
+pub fn command_export(args: ExportArgs) -> Result<()> {
+    let notebooks_dir = get_notebooks_dir()?;
+    let notebook_path = notebooks_dir.join(&args.notebook_name);
+
+    if !notebook_path.is_dir() {
+        bail!("Notebook '{}' not found.", args.notebook_name);
+    }
+
+    match args.format.as_str() {
+        "zip" => export_to_zip(&notebook_path, &args.output)?,
+        "json" => export_to_json(&notebook_path, &args.notebook_name, &args.output)?,
+        _ => bail!(
+            "Unsupported format: '{}'. Please use 'zip' or 'json'.",
+            args.format
+        ),
+    }
+
+    println!(
+        "Successfully exported notebook '{}' to {:?}",
+        args.notebook_name, args.output
+    );
+    Ok(())
+}
+
+fn export_to_zip(notebook_path: &Path, output_path: &Path) -> Result<()> {
+    let file = File::create(output_path)?;
+    let mut zip = ZipWriter::new(file);
+    let options = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Zstd);
+
+    for entry in fs::read_dir(notebook_path)?.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            zip.start_file(filename, options)?;
+            let content = helpers::read_note_file(&path)?;
+            zip.write_all(content.as_bytes())?;
+        }
+    }
+    zip.finish()?;
+    Ok(())
+}
+
+fn export_to_json(notebook_path: &Path, notebook_name: &str, output_path: &Path) -> Result<()> {
+    let mut jots = Vec::new();
+    for entry in fs::read_dir(notebook_path)?.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() {
+            jots.push(JsonJot {
+                filename: path.file_name().unwrap().to_string_lossy().to_string(),
+                content: helpers::read_note_file(&path)?,
+            });
+        }
+    }
+
+    let export_data = JsonExport {
+        notebook_name: notebook_name.to_string(),
+        jots,
+    };
+
+    let json_string = serde_json::to_string_pretty(&export_data)?;
+    fs::write(output_path, json_string)?;
+    Ok(())
+}
+
+/// Imports a notebook from a specified file.
+pub fn command_import(args: ImportArgs) -> Result<()> {
+    let extension = args
+        .file_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+
+    match extension {
+        "zip" => import_from_zip(&args.file_path)?,
+        "json" => import_from_json(&args.file_path)?,
+        _ => bail!(
+            "Unsupported file type: '{:?}'. Please use a '.zip' or '.json' file.",
+            args.file_path
+        ),
+    }
+    Ok(())
+}
+
+fn import_from_zip(file_path: &Path) -> Result<()> {
+    let file = File::open(file_path)?;
+    let mut archive = ZipArchive::new(file)?;
+    let notebook_name = file_path.file_stem().unwrap().to_string_lossy().to_string();
+    let notebooks_dir = get_notebooks_dir()?;
+    let new_notebook_path = notebooks_dir.join(&notebook_name);
+
+    if new_notebook_path.exists() {
+        bail!("A notebook named '{}' already exists. Please rename the zip file or the existing notebook.", notebook_name);
+    }
+    fs::create_dir_all(&new_notebook_path)?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let outpath = new_notebook_path.join(file.name());
+        let mut outfile = File::create(&outpath)?;
+        io::copy(&mut file, &mut outfile)?;
+    }
+
+    println!("Successfully imported notebook '{notebook_name}' from {file_path:?}");
+    Ok(())
+}
+
+fn import_from_json(file_path: &Path) -> Result<()> {
+    let json_string = fs::read_to_string(file_path)?;
+    let export_data: JsonExport = serde_json::from_str(&json_string)?;
+    let notebooks_dir = get_notebooks_dir()?;
+    let new_notebook_path = notebooks_dir.join(&export_data.notebook_name);
+
+    if new_notebook_path.exists() {
+        bail!(
+            "A notebook named '{}' already exists.",
+            export_data.notebook_name
+        );
+    }
+    fs::create_dir_all(&new_notebook_path)?;
+
+    for jot in export_data.jots {
+        let jot_path = new_notebook_path.join(jot.filename);
+        helpers::write_note_file(&jot_path, &jot.content)?;
+    }
+
+    println!(
+        "Successfully imported notebook '{}' from {:?}",
+        export_data.notebook_name, file_path
+    );
+    Ok(())
 }

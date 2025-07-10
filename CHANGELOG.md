@@ -13,19 +13,23 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
-  * **Global Search** (addresses [#8](https://github.com/bgreenwell/rjot/issues/8)): The `find` command now includes an `--all` flag to search for keywords across every note in every notebook, with an updated output format to show which notebook a result belongs to.
+* **Import/export functionality** (addresses [#15](https://github.com/bgreenwell/rjot/issues/15)):
+    * New `export` command to save an entire notebook to a `.zip` archive or a single `.json` file.
+    * New `import` command to restore a notebook from a `.zip` or `.json` file, enabling backups and sharing.
 
-  * **Task Management** (addresses [#11](https://github.com/bgreenwell/rjot/issues/11)): `rjot` now has first-class support for task lists.
+  * **Global search** (addresses [#8](https://github.com/bgreenwell/rjot/issues/8)): The `find` command now includes an `--all` flag to search for keywords across every note in every notebook, with an updated output format to show which notebook a result belongs to.
+
+  * **Task management** (addresses [#11](https://github.com/bgreenwell/rjot/issues/11)): `rjot` now has first-class support for task lists.
     * A new `task` command (with aliases `todo` and `t`) instantly creates a jot formatted as a Markdown task (e.g., `- [ ] My new task`).
     * The `list` command has a new `--tasks` flag to display only jots that contain incomplete tasks.
     * The `info --stats` command now includes a "Task Summary" section, showing a count of pending and completed tasks across the notebook.
 
-  * **Jot Pinning** (addresses [#9](https://github.com/bgreenwell/rjot/issues/9)): You can now pin important jots to keep them easily accessible.
+  * **Jot pinning** (addresses [#9](https://github.com/bgreenwell/rjot/issues/9)): You can now pin important jots to keep them easily accessible.
     * The new `pin` and `unpin` subcommands allow you to toggle the pinned status of any jot.
     * A `pinned: true` attribute is added to the frontmatter of pinned notes.
     * The `list` command now includes a `--pinned` flag to show only pinned jots in the active notebook.
 
-  * **Multi-Notebook Support** (addresses [\#7](https://github.com/bgreenwell/rjot/issues/7)): `rjot` now supports organizing jots into separate notebooks.
+  * **Multi-notebook support** (addresses [#7](https://github.com/bgreenwell/rjot/issues/7)): `rjot` now supports organizing jots into separate notebooks.
       * A new `notebooks/` directory is created in the `rjot` root to store all notebooks as subdirectories.
       * Automatic, one-time migration for existing users, moving old `entries/` into a `notebooks/default/` directory.
       * All commands (`list`, `find`, `today`, etc.) are now scoped to an **active notebook**.
