@@ -1145,3 +1145,100 @@ mod import_export {
         Ok(())
     }
 }
+
+// Test module for the templating feature.
+#[cfg(test)]
+mod templating {
+    use super::*;
+    use git2::{Repository, Signature};
+    use predicates::str::is_match;
+
+    /// Tests the replacement of built-in variables like `{{date}}`,
+    /// `{{branch}}`, `{{project_dir}}`, and `{{uuid}}`.
+    #[test]
+    fn test_built_in_template_variables() -> TestResult {
+        let (temp_dir, rjot_dir) = setup();
+        let templates_dir = rjot_dir.join("templates");
+        fs::create_dir(&templates_dir)?;
+
+        // 1. Initialize a git repo to test the {{branch}} variable.
+        let repo = Repository::init(temp_dir.path())?;
+        // The signature for the commit
+        let signature = Signature::now("rjot-test", "test@rjot.com")?;
+        // Create an empty tree for the initial commit
+        let tree_id = repo.index()?.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        // Create the initial commit
+        let oid = repo.commit(None, &signature, &signature, "Initial commit", &tree, &[])?;
+        let commit = repo.find_commit(oid)?;
+        repo.branch("main", &commit, false)?;
+        repo.set_head("refs/heads/main")?; // Switch to the new branch
+
+        // 2. Create a template file with all the built-in variables.
+        let template_content =
+            "Date: {{date}}\nBranch: {{branch}}\nProject: {{project_dir}}\nID: {{uuid}}";
+        fs::write(templates_dir.join("built-in.md"), template_content)?;
+
+        // 3. Run the `new` command with the template.
+        Command::cargo_bin("rjot")?
+            .current_dir(&temp_dir) // Run from inside the temp dir to get project_dir
+            .args(["new", "--template", "built-in.md"])
+            .env("RJOT_DIR", &rjot_dir)
+            .env("EDITOR", "true") // No-op editor
+            .assert()
+            .success();
+
+        // 4. Verify the output file.
+        let entries_dir = rjot_dir.join("notebooks").join("default");
+        let entry_path = fs::read_dir(entries_dir)?.next().unwrap()?.path();
+        let content = fs::read_to_string(entry_path)?;
+
+        assert!(content.contains("Branch: main"));
+        assert!(content.contains(&format!(
+            "Project: {}",
+            temp_dir.path().file_name().unwrap().to_str().unwrap()
+        )));
+        assert!(is_match(r"ID: [0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}")
+            .unwrap()
+            .eval(&content));
+        assert!(!content.contains("{{date}}")); // Just check it was replaced
+
+        Ok(())
+    }
+
+    /// Tests the replacement of custom variables passed via the `-v` flag.
+    #[test]
+    fn test_custom_template_variables() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+        let templates_dir = rjot_dir.join("templates");
+        fs::create_dir(&templates_dir)?;
+        fs::write(
+            templates_dir.join("custom.md"),
+            "Ticket: {{ticket_id}}\nFeature: {{feature}}",
+        )?;
+
+        Command::cargo_bin("rjot")?
+            .args([
+                "new",
+                "--template",
+                "custom.md",
+                "-v",
+                "ticket_id=PROJ-456",
+                "-v",
+                "feature=templating",
+            ])
+            .env("RJOT_DIR", &rjot_dir)
+            .env("EDITOR", "true")
+            .assert()
+            .success();
+
+        let entries_dir = rjot_dir.join("notebooks").join("default");
+        let entry_path = fs::read_dir(entries_dir)?.next().unwrap()?.path();
+        let content = fs::read_to_string(entry_path)?;
+
+        assert!(content.contains("Ticket: PROJ-456"));
+        assert!(content.contains("Feature: templating"));
+
+        Ok(())
+    }
+}

@@ -19,8 +19,8 @@ This project aims to be the perfect, minimalist companion for developers, writer
 ## Features
 
   * **Instant capture**: Jot down a thought instantly from the command line.
-  * **Task management**: Quickly create tasks and view all pending items across a notebook.
   * **Multiple notebooks**: Organize your jots into separate collections (e.g., `work`, `personal`, `project-x`).
+  * **Task management**: Quickly create tasks and view all pending items across a notebook.
   * **Editor integration**: Use `rjot new` to open your favorite editor (`$EDITOR`) for longer-form entries with template support.
   * **Pinning jots**: Mark essential notes with `rjot pin` to keep them readily accessible with `rjot list --pinned`.
   * **Powerful search & filtering**: Full-text search, tag-based filtering, and time-based views (`today`, `week`, `on <date>`, or `on <date-from>...<date-to>`).
@@ -100,6 +100,83 @@ The `--tags` (or `-t`) flag accepts space-separated or comma-separated values.
 
 # Use a custom template for structured notes
 ❯ rjot new --template meeting.md
+```
+
+### Advanced templating
+
+`rjot`'s templating system can be used to create structured notes with pre-filled, context-aware information.
+
+#### Built-in variables
+
+You can use the following variables in any template file:
+
+  * `{{date}}`: The current date and time in RFC 3339 format.
+  * `{{uuid}}`: A unique identifier (v4 UUID) for the note.
+  * `{{project_dir}}`: The name of the current directory.
+  * `{{branch}}`: The current git branch name.
+
+**Example `bug.md` template:**
+
+```markdown
+---
+tags:
+  - bug
+  - {{project_dir}}
+---
+
+# Bug Report: {{uuid}}
+
+- **Branch**: {{branch}}
+- **Date**: {{date}}
+
+## Description
+
+(describe the bug)
+```
+
+#### Creating a new template
+
+Creating your own template is how you can customize `rjot` for your specific workflow. Here’s how:
+
+1.  **Find your templates directory.** Run `rjot info --paths` to find the location of your `rjot` root directory. Your templates are stored in the `templates/` subdirectory.
+
+2.  **Create a new file.** Create a new Markdown file in the `templates` directory. The name of the file (without the `.md` extension) is the name of your template. For example, `daily-journal.md` becomes the `daily-journal` template.
+
+3.  **Add your content.** Open the file and add your desired content, using any of the built-in or custom variables.
+
+Once the file is saved, you can use it immediately with the `rjot new --template <template-name>` command.
+
+#### Custom variables
+
+You can also define your own variables from the command line using the `-v` or `--variable` flag.
+
+**Example `dev-journal.md` template:**
+
+```markdown
+---
+tags:
+  - journal
+  - {{project_dir}}
+  - {{feature_name}}
+---
+# Dev Journal: {{uuid}}
+
+- **Ticket**: [{{ticket_id}}](https://jira.example.com/browse/{{ticket_id}})
+- **Branch**: {{branch}}
+- **Date**: {{date}}
+
+## Progress
+
+(What did I accomplish today?)
+```
+
+**Command:**
+
+```sh
+rjot new \
+  --template dev-journal \
+  -v feature_name=user-profile \
+  -v ticket_id=PROJ-123
 ```
 
 ### Working with notebooks
@@ -398,7 +475,7 @@ Within that root directory, your notes are organized in the `notebooks/` subdire
 
 ### Templates
 
-You can create custom templates for new notes by placing Markdown files in the `templates/` subdirectory inside your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable, `{{date}}`, which will be replaced with the current timestamp when the note is created.
+You can create custom templates for new notes by placing Markdown files in the `templates/` subdirectory inside your `rjot` root folder (e.g., `~/.config/rjot/templates/`). `rjot` supports one variable, `{{date}}`, which will be replaced with the current timestamp when the note is created. The templating system supports several built-in variables (like `{{branch}}` and `{{uuid}}`) and allows for custom variables to be passed from the command line. For a detailed guide on how to use these advanced features, please see the "Advanced templating" section in the usage guide above.
 
 ## Contributing
 

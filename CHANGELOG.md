@@ -13,6 +13,8 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
+* **Enhanced template system**: The templating engine now supports built-in variables (`{{date}}`, `{{branch}}`, `{{project_dir}}`, `{{uuid}}`) and custom command-line variables (`-v key=value`) for creating dynamic, context-aware notes.
+
 * **Import/export functionality** (addresses [#15](https://github.com/bgreenwell/rjot/issues/15)):
     * New `export` command to save an entire notebook to a `.zip` archive or a single `.json` file.
     * New `import` command to restore a notebook from a `.zip` or `.json` file, enabling backups and sharing.

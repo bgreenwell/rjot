@@ -30,7 +30,10 @@ fn main() -> Result<()> {
     match cli.command {
         Some(command) => match command {
             Commands::Task { message } => commands::command_task(&entries_dir, &message)?,
-            Commands::New { template } => commands::command_new(&entries_dir, template)?,
+            Commands::New {
+                template,
+                variables,
+            } => commands::command_new(&entries_dir, template, variables)?,
             Commands::List {
                 count,
                 pinned,

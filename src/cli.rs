@@ -32,6 +32,13 @@ pub struct Cli {
     pub message: Vec<String>,
 }
 
+/// Parses a key-value pair from the command line.
+fn parse_key_val(s: &str) -> Result<(String, String), String> {
+    s.split_once('=')
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .ok_or_else(|| format!("invalid key-value pair: {s}"))
+}
+
 /// An enumeration of all possible subcommands `rjot` can execute.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
@@ -40,6 +47,10 @@ pub enum Commands {
         /// The name of the template to use from the templates directory.
         #[arg(long, short)]
         template: Option<String>,
+
+        /// Set custom variables for the template (e.g., -v key=value).
+        #[arg(long, short = 'v', value_parser = parse_key_val)]
+        variables: Vec<(String, String)>,
     },
     /// List the most recent jots.
     List {

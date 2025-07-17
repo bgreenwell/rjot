@@ -17,6 +17,7 @@ use chrono::{Datelike, Local, NaiveDate};
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use uuid::Uuid;
 use zip::write::{FileOptions, ZipWriter};
 use zip::ZipArchive;
 
@@ -132,7 +133,7 @@ fn command_notebook_status() -> Result<()> {
     Ok(())
 }
 
-// --- Other Commands (Modified where necessary) ---
+// --- Other Commands ---
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {
@@ -410,18 +411,53 @@ pub fn command_task(entries_dir: &Path, message: &str) -> Result<()> {
 }
 
 /// Creates a new jot by opening the default editor.
-pub fn command_new(entries_dir: &Path, template_name: Option<String>) -> Result<()> {
+pub fn command_new(
+    entries_dir: &Path,
+    template_name: Option<String>,
+    variables: Vec<(String, String)>,
+) -> Result<()> {
     let editor = helpers::get_editor()?;
     let now = Local::now();
     let filename = now.format("%Y-%m-%d-%H%M%S.md").to_string();
     let file_path = entries_dir.join(filename);
-    let tpl_name = template_name.unwrap_or_else(|| "default.md".to_string());
+    let mut tpl_name = template_name.unwrap_or_else(|| "default".to_string());
+    if !tpl_name.ends_with(".md") {
+        tpl_name.push_str(".md");
+    }
     let templates_dir = get_templates_dir()?;
     let tpl_path = templates_dir.join(tpl_name);
     let mut initial_content = String::new();
     if tpl_path.exists() {
-        let now_str = now.to_rfc3339();
-        initial_content = fs::read_to_string(tpl_path)?.replace("{{date}}", &now_str);
+        initial_content = fs::read_to_string(tpl_path)?;
+        // {{date}}
+        initial_content = initial_content.replace("{{date}}", &now.to_rfc3339());
+
+        // {{uuid}}
+        let uuid = Uuid::new_v4().to_string();
+        initial_content = initial_content.replace("{{uuid}}", &uuid);
+
+        // {{project_dir}}
+        let project_dir = env::current_dir()?
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        initial_content = initial_content.replace("{{project_dir}}", &project_dir);
+
+        // {{branch}}
+        let branch = match Repository::discover(".") {
+            Ok(repo) => {
+                let head = repo.head()?;
+                head.shorthand().unwrap_or("detached-head").to_string()
+            }
+            Err(_) => "not-a-repo".to_string(),
+        };
+        initial_content = initial_content.replace("{{branch}}", &branch);
+
+        // Handle custom variables
+        for (key, value) in variables {
+            initial_content = initial_content.replace(&format!("{{{{{key}}}}}"), &value);
+        }
     }
     helpers::write_note_file(&file_path, &initial_content)?;
     let status = Command::new(&editor).arg(&file_path).status()?;

@@ -24,6 +24,7 @@ serde_json = "1.0"
 serde_yaml = "0.9.34"
 which = "4.4.2"
 toml = "0.8"
+uuid = { version = "1.8", features = ["v4", "serde"] }
 zip = { version = "2.1", features = ["zstd"] }
 
 # Non-Windows dependencies
