@@ -213,36 +213,34 @@ pub fn command_shell() -> Result<()> {
         env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
 
     let entries_dir = helpers::get_active_entries_dir(Some(active_notebook.clone()))?;
-    let (note_count, _, _) =
-        calculate_stats_for_dir(&entries_dir).unwrap_or((0, Default::default(), Default::default()));
+    let (note_count, _, _) = calculate_stats_for_dir(&entries_dir).unwrap_or((
+        0,
+        Default::default(),
+        Default::default(),
+    ));
 
     let tips = [
         // Shell Tips
         "In the shell, type `use <name>` and press Tab to autocomplete notebook names.",
         "Use the Up/Down arrow keys in the shell to navigate your command history.",
         "You can exit the shell at any time with `exit`, `quit`, or by pressing Ctrl-D.",
-
         // Basic Usage Tips
         "The `t` command is a fast alias for `task`. Try `t 'My new task'`.",
         "You can use `rm` as a shorter alias for the `delete` command.",
         "Tags can be comma-separated (`-t a,b`) or space-separated (`-t a b`).",
-
         // Advanced Viewing & Filtering
         "Filter for a date range like this: `on 2025-01-01..2025-01-31`.",
         "Compile a full week's notes into a single file with `week --compile > summary.md`.",
         "Pin important notes with `pin <ID>` and view them with `list --pinned`.",
         "Find notes with multiple tags, like `tags rust,project`.",
-
         // Note Management
         "You can edit the last jot you created instantly with `edit --last`.",
         "The `--force` flag on `delete` and `decrypt` will skip confirmation prompts.",
         "Use a unique prefix of a jot's ID for any command, like `show 2025-07-21`.",
-
         // Configuration & Templates
         "Create custom note structures for `new` by adding files to your templates directory.",
         "Find your templates folder and other important paths with `info --paths`.",
         "Pass custom variables to your templates with the `-v` flag, like `new -t bug -v id=123`.",
-        
         // Notebooks & Syncing
         "Run a single command in another notebook with the global `--notebook <name>` flag.",
         "Use `notebook status` to quickly check which notebook is active.",
@@ -281,10 +279,10 @@ pub fn command_shell() -> Result<()> {
         // Not a critical error.
     }
 
-    println!("{}", startup_message);
+    println!("{startup_message}");
 
     loop {
-        let prompt = format!("\x1b[1m\x1b[35mrjot\x1b[0m(\x1b[33m{}\x1b[0m)> ", active_notebook);
+        let prompt = format!("\x1b[1m\x1b[35mrjot\x1b[0m(\x1b[33m{active_notebook}\x1b[0m)> ");
         let readline = rl.readline(&prompt);
 
         match readline {
@@ -304,9 +302,9 @@ pub fn command_shell() -> Result<()> {
                             let notebooks_dir = helpers::get_notebooks_dir()?;
                             if notebooks_dir.join(name).is_dir() {
                                 active_notebook = name.to_string();
-                                println!("Active notebook switched to '{}'.", active_notebook);
+                                println!("Active notebook switched to '{active_notebook}'.");
                             } else {
-                                eprintln!("Error: Notebook '{}' not found.", name);
+                                eprintln!("Error: Notebook '{name}' not found.");
                             }
                         } else {
                             eprintln!("Usage: use <NOTEBOOK_NAME>");
@@ -321,19 +319,21 @@ pub fn command_shell() -> Result<()> {
 
                 match crate::cli::Cli::try_parse_from(args) {
                     Ok(cli) => {
-                        let notebook_override =
-                            cli.notebook.clone().unwrap_or_else(|| active_notebook.clone());
+                        let notebook_override = cli
+                            .notebook
+                            .clone()
+                            .unwrap_or_else(|| active_notebook.clone());
                         let entries_dir =
                             crate::helpers::get_active_entries_dir(Some(notebook_override))?;
 
                         if let Some(command) = cli.command {
                             if let Err(e) = crate::run_command(command, entries_dir) {
-                                eprintln!("Error: {}", e);
+                                eprintln!("Error: {e}");
                             }
                         } else if !cli.message.is_empty() {
                             let message = cli.message.join(" ");
                             if let Err(e) = command_down(&entries_dir, &message, cli.tags) {
-                                eprintln!("Error: {}", e);
+                                eprintln!("Error: {e}");
                             }
                         }
                     }
@@ -349,7 +349,7 @@ pub fn command_shell() -> Result<()> {
                 break;
             }
             Err(err) => {
-                println!("Shell Error: {:?}", err);
+                println!("Shell Error: {err:?}");
                 break;
             }
         }
