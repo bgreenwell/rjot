@@ -2032,6 +2032,7 @@ dependencies = [
  "dirs",
  "git2",
  "predicates",
+ "rand",
  "rpassword",
  "rustyline",
  "rustyline-derive",

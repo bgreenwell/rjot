@@ -16,6 +16,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use clap::Parser;
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
+use rand::Rng;
 use rustyline::completion::Completer;
 use rustyline::config::Configurer;
 use rustyline::CompletionType;
@@ -207,27 +208,69 @@ fn command_notebook_status() -> Result<()> {
 
 /// Enters the interactive rjot shell.
 pub fn command_shell() -> Result<()> {
-    // MOD: Add a cool, colorful startup message.
     const VERSION: &str = env!("CARGO_PKG_VERSION");
-    let startup_message = format!(
-        r#"
-    ########################
-    #          _       __  #
-    #    _____(_)___  / /_ #
-    #   / ___/ / __ \/ __/ #
-    #  / /  / / /_/ / /_   #
-    # /_/__/ /\____/\__/   #
-    #   /___/              #
-    #                      #
-    ########################  
-                        
-   Welcome to the rjot shell, v{VERSION}.
-   Type 'exit' or 'quit' to leave. Press Tab for completions.
-"#
-    );
+    let mut active_notebook =
+        env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
 
-    // Use a purple/magenta color for the logo, similar to the brand color.
-    println!("\x1b[35m{startup_message}\x1b[0m");
+    let entries_dir = helpers::get_active_entries_dir(Some(active_notebook.clone()))?;
+    let (note_count, _, _) =
+        calculate_stats_for_dir(&entries_dir).unwrap_or((0, Default::default(), Default::default()));
+
+    let tips = [
+        // Shell Tips
+        "In the shell, type `use <name>` and press Tab to autocomplete notebook names.",
+        "Use the Up/Down arrow keys in the shell to navigate your command history.",
+        "You can exit the shell at any time with `exit`, `quit`, or by pressing Ctrl-D.",
+
+        // Basic Usage Tips
+        "The `t` command is a fast alias for `task`. Try `t 'My new task'`.",
+        "You can use `rm` as a shorter alias for the `delete` command.",
+        "Tags can be comma-separated (`-t a,b`) or space-separated (`-t a b`).",
+
+        // Advanced Viewing & Filtering
+        "Filter for a date range like this: `on 2025-01-01..2025-01-31`.",
+        "Compile a full week's notes into a single file with `week --compile > summary.md`.",
+        "Pin important notes with `pin <ID>` and view them with `list --pinned`.",
+        "Find notes with multiple tags, like `tags rust,project`.",
+
+        // Note Management
+        "You can edit the last jot you created instantly with `edit --last`.",
+        "The `--force` flag on `delete` and `decrypt` will skip confirmation prompts.",
+        "Use a unique prefix of a jot's ID for any command, like `show 2025-07-21`.",
+
+        // Configuration & Templates
+        "Create custom note structures for `new` by adding files to your templates directory.",
+        "Find your templates folder and other important paths with `info --paths`.",
+        "Pass custom variables to your templates with the `-v` flag, like `new -t bug -v id=123`.",
+        
+        // Notebooks & Syncing
+        "Run a single command in another notebook with the global `--notebook <name>` flag.",
+        "Use `notebook status` to quickly check which notebook is active.",
+        "After setting up a git remote, use `sync` to commit and push all changes.",
+    ];
+    let mut rng = rand::thread_rng();
+    let tip = tips[rng.gen_range(0..tips.len())];
+
+    // Use a regular string literal and correctly escape all backslashes.
+    let startup_message = format!(
+        "\n\
+        \x1b[35m#########################\n\
+        #          _       __   #\n\
+        #    _____(_)___  / /_  #\n\
+        #   / ___/ / __ \\/ __/  #\n\
+        #  / /  / / /_/ / /_    #\n\
+        # /_/__/ /\\____/\\__/    #\n\
+        #   /___/               #\n\
+        #                       #\n\
+        #########################\x1b[0m\n\
+        \n  \x1b[0;1mrjot v{}\x1b[0m | Today: \x1b[32m{}\x1b[0m | Stats: \x1b[33m{} notes in '{}'\x1b[0m\n  \
+        \x1b[2mTip: {}\x1b[0m\n",
+        VERSION,
+        chrono::Local::now().format("%Y-%m-%d"),
+        note_count,
+        active_notebook,
+        tip
+    );
 
     let helper = RjotHelper {};
     let mut rl = Editor::new()?;
@@ -235,14 +278,13 @@ pub fn command_shell() -> Result<()> {
     rl.set_completion_type(CompletionType::List);
 
     if rl.load_history("history.txt").is_err() {
-        // This is not a critical error, just means no history exists yet.
+        // Not a critical error.
     }
 
-    let mut active_notebook =
-        env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
+    println!("{}", startup_message);
 
     loop {
-        let prompt = format!("rjot({active_notebook})> ");
+        let prompt = format!("\x1b[1m\x1b[35mrjot\x1b[0m(\x1b[33m{}\x1b[0m)> ", active_notebook);
         let readline = rl.readline(&prompt);
 
         match readline {
@@ -255,7 +297,6 @@ pub fn command_shell() -> Result<()> {
 
                 let mut parts = line.split_whitespace();
                 let command_name = parts.next().unwrap_or("");
-
                 match command_name {
                     "exit" | "quit" => break,
                     "use" => {
@@ -263,9 +304,9 @@ pub fn command_shell() -> Result<()> {
                             let notebooks_dir = helpers::get_notebooks_dir()?;
                             if notebooks_dir.join(name).is_dir() {
                                 active_notebook = name.to_string();
-                                println!("Active notebook switched to '{active_notebook}'.");
+                                println!("Active notebook switched to '{}'.", active_notebook);
                             } else {
-                                eprintln!("Error: Notebook '{name}' not found.");
+                                eprintln!("Error: Notebook '{}' not found.", name);
                             }
                         } else {
                             eprintln!("Usage: use <NOTEBOOK_NAME>");
@@ -280,21 +321,19 @@ pub fn command_shell() -> Result<()> {
 
                 match crate::cli::Cli::try_parse_from(args) {
                     Ok(cli) => {
-                        let notebook_override = cli
-                            .notebook
-                            .clone()
-                            .unwrap_or_else(|| active_notebook.clone());
+                        let notebook_override =
+                            cli.notebook.clone().unwrap_or_else(|| active_notebook.clone());
                         let entries_dir =
                             crate::helpers::get_active_entries_dir(Some(notebook_override))?;
 
                         if let Some(command) = cli.command {
                             if let Err(e) = crate::run_command(command, entries_dir) {
-                                eprintln!("Error: {e}");
+                                eprintln!("Error: {}", e);
                             }
                         } else if !cli.message.is_empty() {
                             let message = cli.message.join(" ");
                             if let Err(e) = command_down(&entries_dir, &message, cli.tags) {
-                                eprintln!("Error: {e}");
+                                eprintln!("Error: {}", e);
                             }
                         }
                     }
@@ -304,19 +343,18 @@ pub fn command_shell() -> Result<()> {
                 }
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
-                println!("Interrupted (Ctrl-C). Type 'exit' or press Ctrl-D to leave.");
+                println!("\nInterrupted (Ctrl-C). Type 'exit' or press Ctrl-D to leave.");
             }
             Err(rustyline::error::ReadlineError::Eof) => {
-                // Ctrl-D
                 break;
             }
             Err(err) => {
-                println!("Shell Error: {err:?}");
+                println!("Shell Error: {:?}", err);
                 break;
             }
         }
     }
-    // Attempt to save history on exit.
+
     let _ = rl.save_history("history.txt");
     println!("Exiting rjot shell.");
     Ok(())

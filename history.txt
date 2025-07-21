@@ -23,3 +23,9 @@ list
 hellow, work!
 list
 quit
+stats --info
+stats
+info --stata
+quit
+info --paths
+quit

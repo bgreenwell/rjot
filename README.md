@@ -188,18 +188,18 @@ For a more immersive experience, `rjot` provides a stateful interactive shell. T
 ```sh
 ❯ rjot shell
 
-    ########################
-    #          _       __  #
-    #    _____(_)___  / /_ #
-    #   / ___/ / __ \/ __/ #
-    #  / /  / / /_/ / /_   #
-    # /_/__/ /\____/\__/   #
-    #   /___/              #
-    #                      #
-    ########################
+#########################
+#          _       __   #
+#    _____(_)___  / /_  #
+#   / ___/ / __ \/ __/  #
+#  / /  / / /_/ / /_    #
+# /_/__/ /\____/\__/    #
+#   /___/               #
+#                       #
+#########################
 
-   Welcome to the rjot shell, v0.1.0.
-   Type 'exit' or 'quit' to leave. Press Tab for completions.
+  rjot v0.1.0 | Today: 2025-07-20 | Stats: 53 notes in 'default'
+  Tip: Find your templates folder and other important paths with `info --paths`.
 
 rjot(default)>
 ````
