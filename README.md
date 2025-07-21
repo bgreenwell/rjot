@@ -187,7 +187,20 @@ For a more immersive experience, `rjot` provides a stateful interactive shell. T
 
 ```sh
 ❯ rjot shell
-Welcome to the rjot shell. Type 'exit' or 'quit' to leave. Press Tab for completions.
+
+    ########################
+    #          _       __  #
+    #    _____(_)___  / /_ #
+    #   / ___/ / __ \/ __/ #
+    #  / /  / / /_/ / /_   #
+    # /_/__/ /\____/\__/   #
+    #   /___/              #
+    #                      #
+    ########################
+
+   Welcome to the rjot shell, v0.1.0.
+   Type 'exit' or 'quit' to leave. Press Tab for completions.
+
 rjot(default)>
 ````
 
