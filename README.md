@@ -179,6 +179,38 @@ rjot new \
   -v ticket_id=PROJ-123
 ```
 
+### Using the interactive shell
+
+For a more immersive experience, `rjot` provides a stateful interactive shell. This is a great way to perform many actions without having to type `rjot` each time.
+
+**1. Launch the shell:**
+
+```sh
+❯ rjot shell
+Welcome to the rjot shell. Type 'exit' or 'quit' to leave. Press Tab for completions.
+rjot(default)>
+````
+
+**2. Interact with `rjot`:**
+Once inside, you can use all the standard `rjot` commands.
+
+```sh
+rjot(default)> list 5
+rjot(default)> task 'My new task from the shell'
+```
+
+**3. Switch notebooks without `eval`:**
+The shell manages the active notebook internally.
+
+```sh
+rjot(default)> use project-icarus
+Active notebook switched to 'project-icarus'.
+rjot(project-icarus)>
+```
+
+**4. Autocompletion and history:**
+Press `Tab` to autocomplete commands or notebook names. Use the up and down arrow keys to navigate your command history.
+
 ### Working with notebooks
 
 `rjot` allows you to organize your notes into separate notebooks. All commands operate on the currently active notebook.

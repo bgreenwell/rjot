@@ -10,84 +10,89 @@ mod helpers;
 
 use anyhow::Result;
 use clap::Parser;
-
 use cli::Commands;
+use std::path::PathBuf;
+
+pub fn run_command(command: Commands, entries_dir: PathBuf) -> Result<()> {
+    // This logic is now decoupled from where the command originates (main or shell)
+    match command {
+        Commands::Task { message } => commands::command_task(&entries_dir, &message)?,
+        Commands::New {
+            template,
+            variables,
+        } => commands::command_new(&entries_dir, template, variables)?,
+        Commands::List {
+            count,
+            pinned,
+            tasks,
+        } => commands::command_list(&entries_dir, count, pinned, tasks)?,
+        Commands::Find { query, all } => commands::command_find(&entries_dir, &query, all)?,
+        Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
+        #[cfg(not(windows))]
+        Commands::Select => commands::command_select(&entries_dir)?,
+        Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
+        Commands::Yesterday { compile } => commands::command_yesterday(&entries_dir, compile)?,
+        Commands::Week { compile } => commands::command_by_week(&entries_dir, compile)?,
+        Commands::On { date_spec, compile } => {
+            commands::command_on(&entries_dir, &date_spec, compile)?
+        }
+        Commands::Edit { id_prefix, last } => {
+            let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+            commands::command_edit(note_path)?;
+        }
+        Commands::Show { id_prefix, last } => {
+            let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+            commands::command_show(note_path)?;
+        }
+        Commands::Delete {
+            id_prefix,
+            last,
+            force,
+        } => {
+            let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
+            commands::command_delete(note_path, force)?;
+        }
+        Commands::Pin { id_prefix, last } => commands::command_pin(&entries_dir, id_prefix, last)?,
+        Commands::Unpin { id_prefix, last } => {
+            commands::command_unpin(&entries_dir, id_prefix, last)?
+        }
+        Commands::Info(args) => commands::command_info(&entries_dir, args)?,
+        Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
+        Commands::Notebook(args) => commands::command_notebook(args)?,
+        Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
+        Commands::Sync => commands::command_sync()?,
+        Commands::Decrypt { force } => commands::command_decrypt(force)?,
+        Commands::Export(args) => commands::command_export(args)?,
+        Commands::Import(args) => commands::command_import(args)?,
+        // The shell command is handled in main() and will not be matched here.
+        Commands::Shell => unreachable!(),
+    }
+
+    Ok(())
+}
 
 /// The main entrypoint for the rjot application.
-///
-/// This function parses command-line arguments, gets the necessary directory paths,
-/// and dispatches to the appropriate command handler based on user input.
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    // The active notebook's entries directory is now resolved once here.
-    // It intelligently uses the --notebook flag, the RJOT_ACTIVE_NOTEBOOK env var,
-    // or falls back to "default". This resolved path is then passed to all
-    // commands, making them instantly notebook-aware.
-    let entries_dir = helpers::get_active_entries_dir(cli.notebook)?;
-
-    // Match on the subcommand provided by the user.
+    // It either dispatches a command or handles the default jot action.
     match cli.command {
-        Some(command) => match command {
-            Commands::Task { message } => commands::command_task(&entries_dir, &message)?,
-            Commands::New {
-                template,
-                variables,
-            } => commands::command_new(&entries_dir, template, variables)?,
-            Commands::List {
-                count,
-                pinned,
-                tasks,
-            } => commands::command_list(&entries_dir, count, pinned, tasks)?,
-            Commands::Find { query, all } => commands::command_find(&entries_dir, &query, all)?,
-            Commands::Tags { tags } => commands::command_tags_filter(&entries_dir, &tags)?,
-            #[cfg(not(windows))]
-            Commands::Select => commands::command_select(&entries_dir)?,
-            Commands::Today { compile } => commands::command_today(&entries_dir, compile)?,
-            Commands::Yesterday { compile } => commands::command_yesterday(&entries_dir, compile)?,
-            Commands::Week { compile } => commands::command_by_week(&entries_dir, compile)?,
-            Commands::On { date_spec, compile } => {
-                commands::command_on(&entries_dir, &date_spec, compile)?
+        Some(command) => {
+            // The shell command is handled directly here before the dispatch.
+            if let Commands::Shell = command {
+                commands::command_shell()?;
+            } else {
+                let entries_dir = helpers::get_active_entries_dir(cli.notebook)?;
+                run_command(command, entries_dir)?;
             }
-            Commands::Edit { id_prefix, last } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_edit(note_path)?;
-            }
-            Commands::Show { id_prefix, last } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_show(note_path)?;
-            }
-            Commands::Delete {
-                id_prefix,
-                last,
-                force,
-            } => {
-                let note_path = helpers::get_note_path_for_action(&entries_dir, id_prefix, last)?;
-                commands::command_delete(note_path, force)?;
-            }
-            Commands::Pin { id_prefix, last } => {
-                commands::command_pin(&entries_dir, id_prefix, last)?
-            }
-            Commands::Unpin { id_prefix, last } => {
-                commands::command_unpin(&entries_dir, id_prefix, last)?
-            }
-            Commands::Info(args) => commands::command_info(&entries_dir, args)?,
-            Commands::Tag(args) => commands::command_tag(&entries_dir, args)?,
-            Commands::Notebook(args) => commands::command_notebook(args)?,
-            Commands::Init { git, encrypt } => commands::command_init(git, encrypt)?,
-            Commands::Sync => commands::command_sync()?,
-            Commands::Decrypt { force } => commands::command_decrypt(force)?,
-            Commands::Export(args) => commands::command_export(args)?,
-            Commands::Import(args) => commands::command_import(args)?,
-        },
-        // If no subcommand is given, this is the default action.
+        }
         None => {
             if !cli.message.is_empty() {
                 let message = cli.message.join(" ");
-                // The default jot action also correctly uses the resolved `entries_dir`.
+                // MOD: Resolve entries_dir here for the default action.
+                let entries_dir = helpers::get_active_entries_dir(cli.notebook)?;
                 commands::command_down(&entries_dir, &message, cli.tags)?;
             } else {
-                // If no subcommand and no message, show a brief help message.
                 println!(
                     "No message provided. Use 'rjot <MESSAGE>' or a subcommand like 'rjot list'."
                 );

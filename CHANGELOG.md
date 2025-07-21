@@ -13,6 +13,11 @@ This release focuses on a major organizational improvement: multi-notebook suppo
 
 ### Added
 
+* **Interactive Shell** (addresses [#16](https://github.com/bgreenwell/rjot/issues/16)): A new `shell` subcommand (alias `sh`) launches a stateful, interactive REPL.
+    * Provides a more fluid user experience for managing notes in a single session.
+    * Includes command history and dynamic autocompletion for commands and notebook names.
+    * Manages the active notebook internally with a simple `use <notebook_name>` command, removing the need for `eval`.
+
 * **Enhanced template system** (addresses [#10](https://github.com/bgreenwell/rjot/issues/10)): The templating engine now supports built-in variables (`{{date}}`, `{{branch}}`, `{{project_dir}}`, `{{uuid}}`) and custom command-line variables (`-v key=value`) for creating dynamic, context-aware notes.
 
 * **Import/export functionality** (addresses [#15](https://github.com/bgreenwell/rjot/issues/15)):

@@ -192,6 +192,10 @@ pub enum Commands {
 
     /// Import a notebook from a ZIP archive or a JSON file.
     Import(ImportArgs),
+
+    /// Enter the interactive rjot shell.
+    #[command(alias = "sh")]
+    Shell,
 }
 
 /// Arguments for the `notebook` subcommand.

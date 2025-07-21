@@ -14,7 +14,13 @@ use std::process::Command;
 use age::{secrecy::ExposeSecret, x25519, Decryptor, Identity};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
+use clap::Parser;
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature};
+use rustyline::completion::Completer;
+use rustyline::config::Configurer;
+use rustyline::CompletionType;
+use rustyline::Editor;
+use rustyline_derive::{Helper, Highlighter, Hinter, Validator};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use uuid::Uuid;
@@ -47,6 +53,70 @@ struct JsonExport {
 struct JsonJot {
     filename: String,
     content: String,
+}
+
+// Define a helper struct for rustyline autocompletion and hints.
+#[derive(Helper, Hinter, Highlighter, Validator)]
+struct RjotHelper {
+    // This can be expanded later to hold state, like a list of notebook names or tags.
+}
+
+// Implement the completion logic.
+impl Completer for RjotHelper {
+    type Candidate = String;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &rustyline::Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
+        let mut candidates = Vec::new();
+        let mut start_pos = 0;
+
+        let parts: Vec<&str> = line[..pos].split_whitespace().collect();
+        let parts_count = parts.len();
+
+        // If the line is empty or we are still typing the first word.
+        if parts.is_empty() || (parts_count == 1 && !line.ends_with(' ')) {
+            let first_word = parts.first().unwrap_or(&"");
+            start_pos = pos - first_word.len(); // Start replacement at the beginning of the current word.
+
+            let all_commands = vec![
+                "list", "find", "new", "task", "todo", "t", "today", "week", "tags", "notebook",
+                "pin", "unpin", "edit", "show", "delete", "info", "use", "exit", "quit",
+            ];
+
+            for cmd in all_commands {
+                if cmd.starts_with(first_word) {
+                    candidates.push(cmd.to_string());
+                }
+            }
+        // If we are completing the argument for `use` or `notebook`.
+        } else if parts_count > 0 {
+            let command = parts[0];
+            if command == "use" || command == "notebook" {
+                let current_arg = parts.get(1).unwrap_or(&"");
+                // The replacement should start at the beginning of the notebook name argument.
+                start_pos = pos - current_arg.len();
+
+                if let Ok(notebooks_dir) = helpers::get_notebooks_dir() {
+                    if let Ok(entries) = std::fs::read_dir(notebooks_dir) {
+                        for entry in entries.filter_map(Result::ok) {
+                            if entry.path().is_dir() {
+                                let notebook_name = entry.file_name().to_string_lossy().to_string();
+                                if notebook_name.starts_with(current_arg) {
+                                    candidates.push(notebook_name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((start_pos, candidates))
+    }
 }
 
 // --- Notebook Commands ---
@@ -134,6 +204,123 @@ fn command_notebook_status() -> Result<()> {
 }
 
 // --- Other Commands ---
+
+/// Enters the interactive rjot shell.
+pub fn command_shell() -> Result<()> {
+    // MOD: Add a cool, colorful startup message.
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    let startup_message = format!(
+        r#"
+    ########################
+    #          _       __  #
+    #    _____(_)___  / /_ #
+    #   / ___/ / __ \/ __/ #
+    #  / /  / / /_/ / /_   #
+    # /_/__/ /\____/\__/   #
+    #   /___/              #
+    #                      #
+    ########################  
+                        
+   Welcome to the rjot shell, v{VERSION}.
+   Type 'exit' or 'quit' to leave. Press Tab for completions.
+"#
+    );
+
+    // Use a purple/magenta color for the logo, similar to the brand color.
+    println!("\x1b[35m{startup_message}\x1b[0m");
+
+    let helper = RjotHelper {};
+    let mut rl = Editor::new()?;
+    rl.set_helper(Some(helper));
+    rl.set_completion_type(CompletionType::List);
+
+    if rl.load_history("history.txt").is_err() {
+        // This is not a critical error, just means no history exists yet.
+    }
+
+    let mut active_notebook =
+        env::var("RJOT_ACTIVE_NOTEBOOK").unwrap_or_else(|_| "default".to_string());
+
+    loop {
+        let prompt = format!("rjot({active_notebook})> ");
+        let readline = rl.readline(&prompt);
+
+        match readline {
+            Ok(line) => {
+                let _ = rl.add_history_entry(line.as_str());
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+
+                let mut parts = line.split_whitespace();
+                let command_name = parts.next().unwrap_or("");
+
+                match command_name {
+                    "exit" | "quit" => break,
+                    "use" => {
+                        if let Some(name) = parts.next() {
+                            let notebooks_dir = helpers::get_notebooks_dir()?;
+                            if notebooks_dir.join(name).is_dir() {
+                                active_notebook = name.to_string();
+                                println!("Active notebook switched to '{active_notebook}'.");
+                            } else {
+                                eprintln!("Error: Notebook '{name}' not found.");
+                            }
+                        } else {
+                            eprintln!("Usage: use <NOTEBOOK_NAME>");
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                let mut args = vec!["rjot"];
+                args.extend(line.split_whitespace());
+
+                match crate::cli::Cli::try_parse_from(args) {
+                    Ok(cli) => {
+                        let notebook_override = cli
+                            .notebook
+                            .clone()
+                            .unwrap_or_else(|| active_notebook.clone());
+                        let entries_dir =
+                            crate::helpers::get_active_entries_dir(Some(notebook_override))?;
+
+                        if let Some(command) = cli.command {
+                            if let Err(e) = crate::run_command(command, entries_dir) {
+                                eprintln!("Error: {e}");
+                            }
+                        } else if !cli.message.is_empty() {
+                            let message = cli.message.join(" ");
+                            if let Err(e) = command_down(&entries_dir, &message, cli.tags) {
+                                eprintln!("Error: {e}");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        e.print().unwrap_or_default();
+                    }
+                }
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                println!("Interrupted (Ctrl-C). Type 'exit' or press Ctrl-D to leave.");
+            }
+            Err(rustyline::error::ReadlineError::Eof) => {
+                // Ctrl-D
+                break;
+            }
+            Err(err) => {
+                println!("Shell Error: {err:?}");
+                break;
+            }
+        }
+    }
+    // Attempt to save history on exit.
+    let _ = rl.save_history("history.txt");
+    println!("Exiting rjot shell.");
+    Ok(())
+}
 
 /// Initializes the `rjot` directory, optionally with Git and/or encryption.
 pub fn command_init(git: bool, encrypt: bool) -> Result<()> {

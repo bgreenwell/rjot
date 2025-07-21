@@ -1,0 +1,25 @@
+#V2
+a note for the shell test
+list
+exit
+list
+use work
+notebooks --list
+notebook list
+q
+quit
+quit()
+quit
+default
+quit
+use default
+notebook default
+notebook list
+quit
+notebook new work
+use work
+hellow, work\\!
+list
+hellow, work!
+list
+quit

@@ -1242,3 +1242,55 @@ mod templating {
         Ok(())
     }
 }
+
+// A module for testing the interactive shell.
+#[cfg(test)]
+mod shell {
+    use super::*;
+    use std::io::Write;
+    // Use the standard library's process::Command for interactive tests.
+    use std::process::{Command, Stdio};
+
+    /// Tests the basic lifecycle of the interactive shell.
+    #[test]
+    fn test_shell_lifecycle_and_commands() -> TestResult {
+        let (_temp_dir, rjot_dir) = setup();
+
+        // Use std::process::Command to get a handle to stdin.
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_rjot"));
+        cmd.arg("shell")
+            .env("RJOT_DIR", &rjot_dir)
+            .stdin(Stdio::piped()) // Pipe stdin so we can write to it.
+            .stdout(Stdio::piped()); // Pipe stdout so we can read it.
+
+        let mut process = cmd.spawn()?;
+
+        {
+            let stdin = process.stdin.as_mut().expect("Failed to open stdin");
+
+            // 1. Create a jot to ensure the list command has output.
+            stdin.write_all(b"a note for the shell test\n")?;
+
+            // 2. Run the `list` command and verify its output.
+            stdin.write_all(b"list\n")?;
+
+            // 3. Exit the shell.
+            stdin.write_all(b"exit\n")?;
+        }
+
+        // Wait for the process to exit and capture its output.
+        let output = process.wait_with_output()?;
+
+        // Assert that the entire process was successful.
+        assert!(output.status.success());
+
+        // Verify the output contains expected strings from the shell lifecycle.
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(stdout.contains("Welcome to the rjot shell."));
+        // Check that the output from the `list` command is present.
+        assert!(stdout.contains("a note for the shell test"));
+        assert!(stdout.contains("Exiting rjot shell."));
+
+        Ok(())
+    }
+}
