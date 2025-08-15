@@ -2,7 +2,7 @@
 
 ---
 
-<p align="center">
+<p align="left">
   <img src="assets/logo-banner.png" alt="rjot startup banner" width="600" />
 </p>
 
