@@ -86,8 +86,14 @@ jobs:
     - name: Set OpenSSL environment (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
-        echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
+        OPENSSL_PREFIX=$(brew --prefix openssl)
+        echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+        echo "OPENSSL_ROOT_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+        echo "PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig" >> $GITHUB_ENV
+        echo "LDFLAGS=-L$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+        echo "CPPFLAGS=-I$OPENSSL_PREFIX/include" >> $GITHUB_ENV
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
