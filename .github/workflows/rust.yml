@@ -158,7 +158,7 @@ jobs:
         key: coverage-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install cargo-llvm-cov
-      run: cargo install cargo-llvm-cov --locked
+      run: cargo llvm-cov --version || cargo install cargo-llvm-cov --locked
 
     - name: Generate coverage report
       run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
