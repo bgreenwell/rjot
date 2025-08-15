@@ -1,0 +1,178 @@
+# Release workflow - builds and publishes rjot releases
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Create the GitHub release
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Extract release notes
+      id: release_notes
+      run: |
+        if [[ -f CHANGELOG.md ]]; then
+          # Extract release notes from CHANGELOG.md between the first two headings
+          awk '/^## / {if(++count==2) exit} count==1 && !/^## / {print}' CHANGELOG.md > release_notes.txt
+        else
+          echo "Release ${{ github.ref_name }}" > release_notes.txt
+        fi
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: ${{ github.ref_name }}
+        body_path: release_notes.txt
+        draft: true
+        prerelease: false
+
+  # Build binaries for multiple platforms
+  build-and-upload:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            name: rjot-x86_64-unknown-linux-musl
+          - os: ubuntu-latest  
+            target: aarch64-unknown-linux-musl
+            name: rjot-aarch64-unknown-linux-musl
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: rjot-x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: rjot-aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: rjot-x86_64-pc-windows-msvc.exe
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install cross-compilation tools
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools
+        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+        fi
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Package binary (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        tar czf ${{ matrix.name }}.tar.gz rjot
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_NAME=${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+
+    - name: Package binary (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        Compress-Archive -Path rjot.exe -DestinationPath ${{ matrix.name }}.zip
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+        echo "ASSET_NAME=${{ matrix.name }}.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream
+
+  # Publish to crates.io
+  publish-crate:
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-publish-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Publish to crates.io
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish --dry-run && cargo publish
+
+  # Finalize the release (undraft it)
+  finalize-release:
+    needs: [create-release, build-and-upload, publish-crate]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Finalize Release
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.repos.updateRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            release_id: ${{ needs.create-release.outputs.release_id }},
+            draft: false
+          });

@@ -1,36 +1,29 @@
-# This is the name of the workflow that will be displayed on GitHub
-name: Rust CI
+# Enhanced CI/CD pipeline for rjot
+name: CI
 
-# This section defines when the workflow will run.
-# It will trigger on any `push` to any branch, and on any `pull_request`.
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
-# This defines the environment for the workflow. We set Cargo to use color output.
 env:
   CARGO_TERM_COLOR: always
 
-# This section defines the jobs to be run. We have one job called "build".
 jobs:
-  build:
-    # The name that will be displayed for this job on GitHub
-    name: Test on ${{ matrix.os }}
-    
-    # This job will run on multiple operating systems to ensure cross-platform compatibility
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    # These are the individual steps the job will execute in order
+  # Quick check job for fast feedback
+  check:
+    name: Quick Check
+    runs-on: ubuntu-latest
     steps:
-    # 1. Check out the repository code so the workflow can access it
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    # 2. Cache the cargo directories to speed up future builds
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
     - name: Cache cargo dependencies
       uses: actions/cache@v4
       with:
@@ -40,22 +33,177 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          check-${{ runner.os }}-cargo-
 
-    # 3. Check that the code is formatted correctly
     - name: Check formatting
       run: cargo fmt -- --check
 
-    # 4. Run Clippy to check for common mistakes and enforce idiomatic Rust
-    #    The `-D warnings` flag treats all warnings as errors, failing the build.
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
 
-    # 5. Run the tests (if any are defined)
+    - name: Check documentation
+      run: cargo doc --no-deps --document-private-items
+
+  # Security audit
+  security:
+    name: Security Audit  
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: audit-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit --locked
+
+    - name: Run security audit
+      run: cargo audit
+
+  # Cross-platform testing
+  test:
+    name: Test on ${{ matrix.os }}
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest  
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: test-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          test-${{ matrix.target }}-cargo-
+
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --target ${{ matrix.target }}
 
-    # 6. Build the project in release mode to ensure it compiles
-    - name: Build
-      run: cargo build --release --verbose
+    - name: Run integration tests
+      run: cargo test --verbose --target ${{ matrix.target }} --test '*'
+
+    - name: Build release
+      run: cargo build --release --target ${{ matrix.target }}
+
+  # Test coverage (Linux only)
+  coverage:
+    name: Code Coverage
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: coverage-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov --locked
+
+    - name: Generate coverage report
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      with:
+        file: lcov.info
+        fail_ci_if_error: false
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Benchmarks (optional, for performance regression detection)
+  benchmarks:
+    name: Benchmarks
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: bench-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run benchmarks
+      run: cargo bench --no-run  # Only build benchmarks for now
+
+  # Final validation
+  ci-success:
+    name: CI Success
+    needs: [check, security, test, coverage]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Check all jobs
+      run: |
+        if [[ "${{ needs.check.result }}" != "success" ]] || 
+           [[ "${{ needs.security.result }}" != "success" ]] ||
+           [[ "${{ needs.test.result }}" != "success" ]] ||
+           [[ "${{ needs.coverage.result }}" != "success" ]]; then
+          echo "One or more CI jobs failed"
+          exit 1
+        else
+          echo "All CI jobs passed successfully"
+        fi
 

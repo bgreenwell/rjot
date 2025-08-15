@@ -1286,8 +1286,8 @@ mod shell {
 
         // Verify the output contains expected strings from the shell lifecycle.
         let stdout = String::from_utf8(output.stdout)?;
-        assert!(stdout.contains("Welcome to the rjot shell."));
-        // Check that the output from the `list` command is present.
+        assert!(stdout.contains("██████╗")); // Check for the ASCII logo
+                                             // Check that the output from the `list` command is present.
         assert!(stdout.contains("a note for the shell test"));
         assert!(stdout.contains("Exiting rjot shell."));
 

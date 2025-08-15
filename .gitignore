@@ -71,3 +71,11 @@ ehthumbs_vista.db
 
 # Ignore all directories with _files suffix
 *_files/
+
+# =============================================================================
+# AI Assistant Contributing Guidelines
+# =============================================================================
+
+# AI assistant contributing guidelines - keep these private
+CLAUDE.md
+GEMINI.md

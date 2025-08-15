@@ -1,10 +1,29 @@
-# rjot <img src="assets/logo-color.png" align="right" height="120" alt="rjot logo" />
+# rjot
+
+```
+       _       _   
+  _ __(_) ___ | |_ 
+ | '__| |/ _ \| __|
+ | |  | | (_) | |_ 
+ |_| _/ |\___/ \__|
+    |__/
+```
 
 A minimalist, command-line jotting utility that's fast, private, git-friendly, and written in Rust.
 
-[![Build Status](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions)
-[![Crates.io](https://img.shields.io/crates/v/rjot.svg?label=crates.io)](https://crates.io/crates/rjot)
+[![CI Status](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml)
+[![Release](https://github.com/bgreenwell/rjot/actions/workflows/release.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/release.yml)
+[![Security Audit](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg?event=schedule)](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml)
+[![codecov](https://codecov.io/gh/bgreenwell/rjot/branch/main/graph/badge.svg)](https://codecov.io/gh/bgreenwell/rjot)
+
+[![Crates.io](https://img.shields.io/crates/v/rjot.svg)](https://crates.io/crates/rjot)
+[![Downloads](https://img.shields.io/crates/d/rjot.svg)](https://crates.io/crates/rjot)
+[![Documentation](https://docs.rs/rjot/badge.svg)](https://docs.rs/rjot)
+[![GitHub Release](https://img.shields.io/github/v/release/bgreenwell/rjot)](https://github.com/bgreenwell/rjot/releases)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Platform Support](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)](https://github.com/bgreenwell/rjot#installation)
 
 ## The vision
 
@@ -188,18 +207,16 @@ For a more immersive experience, `rjot` provides a stateful interactive shell. T
 ```sh
 ❯ rjot shell
 
-#########################
-#          _       __   #
-#    _____(_)___  / /_  #
-#   / ___/ / __ \/ __/  #
-#  / /  / / /_/ / /_    #
-# /_/__/ /\____/\__/    #
-#   /___/               #
-#                       #
-#########################
+ ██████╗       ██╗  ██████╗  ████████╗
+ ██╔══██╗      ██║ ██╔═══██╗ ╚══██╔══╝
+ ██████╔╝      ██║ ██║   ██║    ██║   
+ ██╔══██╗ ██   ██║ ██║   ██║    ██║   
+ ██║  ██║ ╚█████╔╝ ╚██████╔╝    ██║   
+ ╚═╝  ╚═╝  ╚════╝   ╚═════╝     ╚═╝   
 
   rjot v0.1.0 | Today: 2025-07-20 | Stats: 53 notes in 'default'
   Tip: Find your templates folder and other important paths with `info --paths`.
+  Type 'exit' or 'quit' to leave the shell.
 
 rjot(default)>
 ````

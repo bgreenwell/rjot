@@ -249,20 +249,18 @@ pub fn command_shell() -> Result<()> {
     let mut rng = rand::thread_rng();
     let tip = tips[rng.gen_range(0..tips.len())];
 
-    // Use a regular string literal and correctly escape all backslashes.
+    // Use the new oh-my-logo generated ASCII art
     let startup_message = format!(
         "\n\
-        \x1b[35m#########################\n\
-        #          _       __   #\n\
-        #    _____(_)___  / /_  #\n\
-        #   / ___/ / __ \\/ __/  #\n\
-        #  / /  / / /_/ / /_    #\n\
-        # /_/__/ /\\____/\\__/    #\n\
-        #   /___/               #\n\
-        #                       #\n\
-        #########################\x1b[0m\n\
+        \x1b[38;5;208m ██████╗       ██╗  ██████╗  ████████╗\x1b[0m\n\
+        \x1b[38;5;209m ██╔══██╗      ██║ ██╔═══██╗ ╚══██╔══╝\x1b[0m\n\
+        \x1b[38;5;210m ██████╔╝      ██║ ██║   ██║    ██║   \x1b[0m\n\
+        \x1b[38;5;211m ██╔══██╗ ██   ██║ ██║   ██║    ██║   \x1b[0m\n\
+        \x1b[38;5;212m ██║  ██║ ╚█████╔╝ ╚██████╔╝    ██║   \x1b[0m\n\
+        \x1b[38;5;213m ╚═╝  ╚═╝  ╚════╝   ╚═════╝     ╚═╝   \x1b[0m\n\
         \n  \x1b[0;1mrjot v{}\x1b[0m | Today: \x1b[32m{}\x1b[0m | Stats: \x1b[33m{} notes in '{}'\x1b[0m\n  \
-        \x1b[2mTip: {}\x1b[0m\n",
+        \x1b[2mTip: {}\x1b[0m\n  \
+        \x1b[2mType 'exit' or 'quit' to leave the shell.\x1b[0m\n",
         VERSION,
         chrono::Local::now().format("%Y-%m-%d"),
         note_count,

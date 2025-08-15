@@ -29,3 +29,8 @@ info --stata
 quit
 info --paths
 quit
+:x
+exit
+a note for the shell test
+list
+exit

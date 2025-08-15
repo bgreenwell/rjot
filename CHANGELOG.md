@@ -7,7 +7,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-07-08
+## [Unreleased] - 2025-08-15
+
+This release focuses on enhancing the development pipeline, visual identity, and user experience improvements.
+
+### Added
+
+* **Enhanced CI/CD Pipeline**: Comprehensive GitHub Actions workflow improvements
+  * New automated release workflow with cross-platform binary builds (Linux x86_64/ARM64, macOS x86_64/ARM64, Windows x86_64)
+  * Automated crates.io publishing on release tags
+  * Enhanced CI with security auditing, code coverage reporting, and performance benchmarks
+  * Multi-stage pipeline with quick checks, cross-platform testing, and quality gates
+* **Modern ASCII Logo**: Updated visual identity using oh-my-logo
+  * New sunset-themed ASCII art for both README and interactive shell
+  * Consistent branding across documentation and application
+  * Terminal-native logo that scales with font size
+* **Improved Shell UX**: Better user guidance in interactive shell
+  * Added clear exit instructions in startup banner
+  * Enhanced startup message with exit commands ('exit' or 'quit')
+
+### Changed
+
+* **CI Workflow**: Upgraded from deprecated `actions-rs/toolchain` to modern `dtolnay/rust-toolchain`
+* **Documentation**: Updated README with comprehensive project status badges
+  * CI status, release status, security audit status, and code coverage badges
+  * Package distribution badges (crates.io version, downloads, docs.rs)
+  * Project information badges (license, Rust version, platform support)
+
+### Infrastructure
+
+* **AI Contributing Guidelines**: Added comprehensive guidelines for AI assistants (CLAUDE.md, GEMINI.md)
+  * Detailed coding standards and patterns specific to the rjot codebase
+  * Testing requirements and CI/CD compliance guidelines  
+  * Project-specific conventions and quality checklists
+
+## [Previous] - 2025-07-08
 
 This release focuses on a major organizational improvement: multi-notebook support. It also includes quality-of-life improvements, robust error handling, and a comprehensive test suite to solidify the core user experience.
 
