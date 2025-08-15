@@ -1,13 +1,10 @@
-# rjot
+# rjot 
 
-```
-       _       _   
-  _ __(_) ___ | |_ 
- | '__| |/ _ \| __|
- | |  | | (_) | |_ 
- |_| _/ |\___/ \__|
-    |__/
-```
+---
+
+<p align="center">
+  <img src="assets/logo-banner.png" alt="rjot startup banner" width="600" />
+</p>
 
 A minimalist, command-line jotting utility that's fast, private, git-friendly, and written in Rust.
 

@@ -1,0 +1,27 @@
+<svg width="520" height="140" viewBox="0 0 520 140" xmlns="http://www.w3.org/2000/svg">
+  <!-- Terminal background -->
+  <rect width="520" height="140" fill="#0c0c0c" rx="4"/>
+  
+  <!-- ASCII Logo with exact ANSI colors -->
+  <text x="20" y="25" font-family="monospace" font-size="11" fill="#ff8700"> ██████╗       ██╗  ██████╗  ████████╗</text>
+  <text x="20" y="39" font-family="monospace" font-size="11" fill="#ff875f"> ██╔══██╗      ██║ ██╔═══██╗ ╚══██╔══╝</text>
+  <text x="20" y="53" font-family="monospace" font-size="11" fill="#ff8787"> ██████╔╝      ██║ ██║   ██║    ██║   </text>
+  <text x="20" y="67" font-family="monospace" font-size="11" fill="#ff87af"> ██╔══██╗ ██   ██║ ██║   ██║    ██║   </text>
+  <text x="20" y="81" font-family="monospace" font-size="11" fill="#ff87d7"> ██║  ██║ ╚█████╔╝ ╚██████╔╝    ██║   </text>
+  <text x="20" y="95" font-family="monospace" font-size="11" fill="#ff87ff"> ╚═╝  ╚═╝  ╚════╝   ╚═════╝     ╚═╝   </text>
+  
+  <!-- Version info line -->
+  <text x="20" y="115" font-family="monospace" font-size="9">
+    <tspan fill="#ffffff" font-weight="bold">  rjot v0.1.0</tspan>
+    <tspan fill="#ffffff"> | Today: </tspan>
+    <tspan fill="#00ff00">2025-08-15</tspan>
+    <tspan fill="#ffffff"> | Stats: </tspan>
+    <tspan fill="#ffff00">42 notes in 'default'</tspan>
+  </text>
+  
+  <!-- Tip line -->
+  <text x="20" y="128" font-family="monospace" font-size="9" fill="#888888">  Tip: Find your templates folder and other important paths with `info --paths`.</text>
+  
+  <!-- Exit instruction -->
+  <text x="20" y="137" font-family="monospace" font-size="9" fill="#888888">  Type 'exit' or 'quit' to leave the shell.</text>
+</svg>
