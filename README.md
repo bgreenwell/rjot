@@ -7,17 +7,9 @@
 A minimalist, command-line jotting utility that's fast, private, git-friendly, and written in Rust.
 
 [![CI Status](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml)
-[![Release](https://github.com/bgreenwell/rjot/actions/workflows/release.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/bgreenwell/rjot/graph/badge.svg?branch=main)](https://codecov.io/gh/bgreenwell/rjot)
-
-[![Crates.io](https://img.shields.io/crates/v/rjot.svg)](https://crates.io/crates/rjot)
-[![Downloads](https://img.shields.io/crates/d/rjot.svg)](https://crates.io/crates/rjot)
-[![Documentation](https://docs.rs/rjot/badge.svg)](https://docs.rs/rjot)
-[![GitHub Release](https://img.shields.io/github/v/release/bgreenwell/rjot)](https://github.com/bgreenwell/rjot/releases)
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
-[![Platform Support](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)](https://github.com/bgreenwell/rjot#installation)
+[![Platform Support](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)](https://github.com/bgreenwell/rjot)
 
 ## The vision
 
