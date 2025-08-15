@@ -8,7 +8,6 @@ A minimalist, command-line jotting utility that's fast, private, git-friendly, a
 
 [![CI Status](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml)
 [![Release](https://github.com/bgreenwell/rjot/actions/workflows/release.yml/badge.svg)](https://github.com/bgreenwell/rjot/actions/workflows/release.yml)
-[![Security Audit](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml/badge.svg?event=schedule)](https://github.com/bgreenwell/rjot/actions/workflows/rust.yml)
 [![codecov](https://codecov.io/gh/bgreenwell/rjot/graph/badge.svg?branch=main)](https://codecov.io/gh/bgreenwell/rjot)
 
 [![Crates.io](https://img.shields.io/crates/v/rjot.svg)](https://crates.io/crates/rjot)
