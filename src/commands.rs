@@ -854,11 +854,11 @@ pub fn command_select(entries_dir: &PathBuf) -> Result<()> {
     }
 
     impl SkimItem for NoteItem {
-        fn text(&self) -> Cow<str> {
+        fn text(&self) -> Cow<'_, str> {
             Cow::Borrowed(&self.display_text)
         }
 
-        fn output(&self) -> Cow<str> {
+        fn output(&self) -> Cow<'_, str> {
             Cow::Borrowed(&self.id)
         }
     }

@@ -34,3 +34,6 @@ exit
 a note for the shell test
 list
 exit
+a note for the shell test
+list
+exit
